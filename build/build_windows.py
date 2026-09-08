@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,7 +103,10 @@ def main():
         # Close only this application's process on the disposable CI runner.
         subprocess.run(["taskkill", "/IM", "ComedyHostStudio.exe", "/T", "/F"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        run([target / "Uninstall.exe", "/S", "_?=" + str(target)])
+        run([target / "Uninstall.exe", "/S"])
+        deadline = time.monotonic() + 90
+        while (target / "engine.py").exists() and time.monotonic() < deadline:
+            time.sleep(1)
         if (target / "engine.py").exists():
             raise RuntimeError("Old uninstall left engine installed")
         shutil.rmtree(target, ignore_errors=True)
@@ -113,7 +117,10 @@ def main():
                 if not dst.is_file() or digest(src) != digest(dst):
                     raise RuntimeError("Installed payload mismatch: " + str(src.relative_to(payload)))
         run([target / python_relative, target / "engine.py", "--help"], cwd=target)
-        run([target / "Uninstall.exe", "/S", "_?=" + str(target)])
+        run([target / "Uninstall.exe", "/S"])
+        deadline = time.monotonic() + 90
+        while ((target / "engine.py").exists() or (target / "ComedyHostStudio.exe").exists()) and time.monotonic() < deadline:
+            time.sleep(1)
         if (target / "engine.py").exists() or (target / "ComedyHostStudio.exe").exists():
             raise RuntimeError("5.5.4 uninstall did not remove application")
         (DIST / "SHA256.txt").write_text(digest(exe) + "  " + exe.name + "\n")
