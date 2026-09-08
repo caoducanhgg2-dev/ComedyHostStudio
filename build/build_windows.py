@@ -22,12 +22,15 @@ def digest(path):
 
 
 def run(argv, cwd=ROOT):
-    proc = subprocess.run([str(x) for x in argv], cwd=cwd, text=True,
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          encoding="utf-8", errors="replace", timeout=900)
     with (DIST / "build-log.txt").open("a", encoding="utf-8") as log:
-        log.write(str(argv[0]) + "\n" + proc.stdout + "\nexit=" + str(proc.returncode) + "\n")
-    print(proc.stdout)
+        print("START", str(argv[0]), flush=True)
+        log.write("START " + repr([str(x) for x in argv]) + "\n")
+        log.flush()
+        # GUI children may inherit stdout. A file avoids waiting for their pipe EOF.
+        proc = subprocess.run([str(x) for x in argv], cwd=cwd,
+                              stdout=log, stderr=subprocess.STDOUT, timeout=240)
+        log.write("\nexit=" + str(proc.returncode) + "\n")
+    print("END", str(argv[0]), "exit=" + str(proc.returncode), flush=True)
     if proc.returncode:
         raise RuntimeError(f"Command failed: {argv[0]}, exit={proc.returncode}")
 
@@ -95,6 +98,10 @@ def main():
         run([sources[".exe"], "/S", "/D=" + str(target)])
         if not (target / "ComedyHostStudio.exe").is_file():
             raise RuntimeError("Beta 5.1 install failed")
+        # The original installer may launch its GUI even during silent setup.
+        # Close only this application's process on the disposable CI runner.
+        subprocess.run(["taskkill", "/IM", "ComedyHostStudio.exe", "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         run([target / "Uninstall.exe", "/S", "_?=" + str(target)])
         if (target / "engine.py").exists():
             raise RuntimeError("Old uninstall left engine installed")
