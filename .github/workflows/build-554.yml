@@ -5,6 +5,9 @@ on:
     branches: [build/comedyhost-554]
 permissions:
   contents: read
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
 jobs:
   build:
     runs-on: windows-2022
