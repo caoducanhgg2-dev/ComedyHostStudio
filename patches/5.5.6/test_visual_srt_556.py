@@ -7,6 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("visual_srt_556", ROOT / "visual_srt_556.py")
 M = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(M)
+RSPEC = importlib.util.spec_from_file_location("visual_rules_556", ROOT / "visual_rules_556.py")
+R = importlib.util.module_from_spec(RSPEC)
+RSPEC.loader.exec_module(R)
+M._fragment_issue = R.fragment_issue
 
 
 def test_good_fourteen_word_sentence_is_not_rejected():
@@ -42,6 +46,7 @@ def test_complete_caption_is_not_fragment():
         "The person exits through a door with frosted glass panels.",
         "A worker trims grass along the paved path near the fence.",
         "The house shows signs of abandonment.",
+        "Stone and glass are visible near the entrance.",
     ]
     for text in good:
         assert not M._fragment_issue(text, "en"), text
