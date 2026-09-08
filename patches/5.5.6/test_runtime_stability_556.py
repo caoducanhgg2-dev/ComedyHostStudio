@@ -10,11 +10,11 @@ SPEC.loader.exec_module(M)
 
 
 class FakeRuntime:
-    def __init__(self):
-        self.models = ["qwen3:8b-q4_K_M"]
+    def __init__(self, model="qwen3:8b-q4_K_M"):
+        self.models = [model] if model else []
         self.calls = []
-        self.backend_reported_models = {"qwen3:8b-q4_K_M"}
-        self.backend_info = {"qwen3:8b-q4_K_M": {"size_vram": 1}}
+        self.backend_reported_models = {model} if model else set()
+        self.backend_info = {model: {"size_vram": 1}} if model else {}
         self._chs_job_runs = 1
 
     def api(self, route, payload=None, timeout=0):
@@ -29,32 +29,39 @@ class FakeRuntime:
         raise AssertionError(route)
 
 
-def test_first_job_skips_cleanup():
+def test_first_job_skips_initial_cleanup():
     r = FakeRuntime(); r._chs_job_runs = 0
     report = M.prepare_consecutive_job(r)
     assert report["skipped"] is True
     assert not r.calls
 
 
-def test_second_job_unloads_resident_writer():
+def test_second_job_unloads_resident_model():
     r = FakeRuntime()
     report = M.prepare_consecutive_job(r)
     assert report["skipped"] is False
-    assert report["attempted"] == ["qwen3:8b-q4_K_M"]
     assert report["remaining"] == []
+    assert r.models == []
+
+
+def test_writer_phase_unloads_visual_model_without_server_restart():
+    r = FakeRuntime("qwen3-vl:4b-instruct-q4_K_M")
+    report = M.prepare_writer_phase(r)
+    assert report["remaining"] == []
+    assert r.models == []
     assert any(route == "/api/generate" and payload.get("keep_alive") == 0 for route,payload in r.calls if payload)
-    assert r.backend_reported_models == set()
-    assert r.backend_info == {}
 
 
-def test_job_counter_advances_after_failure_or_success():
+def test_finish_job_frees_writer_and_advances_counter():
     r = FakeRuntime(); r._chs_job_runs = 0
-    M.mark_job_finished(r); M.mark_job_finished(r)
-    assert r._chs_job_runs == 2
+    report = M.finish_job(r)
+    assert report["remaining"] == []
+    assert r.models == []
+    assert r._chs_job_runs == 1
 
 
 if __name__ == "__main__":
-    tests = [v for k,v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    tests=[v for k,v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for test in tests:
-        test(); print("PASS", test.__name__)
+        test(); print("PASS",test.__name__)
     print(f"{len(tests)}/{len(tests)} tests passed")
