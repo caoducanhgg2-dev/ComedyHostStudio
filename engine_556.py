@@ -1,7 +1,9 @@
 """Comedy Host Studio 5.5.6 bootstrap.
 
 Clean wrapper around the preserved 5.5.4 core. SRT-only routes to the 5.5.6
-information-first writer. Consecutive jobs release stale local-AI model state.
+information-first writer. Consecutive jobs release stale local-AI model state,
+and an adaptive memory guard prevents Qwen3-VL prewarm from using Ollama's
+512-token default batch on a RAM-constrained 16-GB workstation.
 """
 from __future__ import annotations
 
@@ -11,9 +13,13 @@ import engine_554_core as core
 import visual_srt_556 as visual
 from visual_rules_556 import fragment_issue
 from runtime_stability_556 import prepare_consecutive_job, mark_job_finished
+from memory_guard_556 import install_memory_guard
 
 VERSION = "1.1.0-beta5.5.6-visual-quality-stability"
 core.VERSION = VERSION
+
+# Apply runtime safety before core.main() constructs/starts Runtime.
+install_memory_guard(core)
 
 # Centralize the corrected sentence-completeness detector. All writer/fallback/QA
 # functions in visual_srt_556 resolve this global at runtime.
