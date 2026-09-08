@@ -8,11 +8,16 @@ from __future__ import annotations
 import sys
 
 import engine_554_core as core
-from visual_srt_556 import write_visual_srt_script_556
+import visual_srt_556 as visual
+from visual_rules_556 import fragment_issue
 from runtime_stability_556 import prepare_consecutive_job, mark_job_finished
 
 VERSION = "1.1.0-beta5.5.6-visual-quality-stability"
 core.VERSION = VERSION
+
+# Centralize the corrected sentence-completeness detector. All writer/fallback/QA
+# functions in visual_srt_556 resolve this global at runtime.
+visual._fragment_issue = fragment_issue
 
 
 def _plan(self, story, duration):
@@ -28,8 +33,8 @@ def _plan(self, story, duration):
 
 
 def _writer(self, observations, story, duration, language, transcript=None, dialogue_mode=False, creative_plan=None):
-    result = write_visual_srt_script_556(self, observations, story, duration, language,
-                                         transcript=transcript or [], dialogue_mode=bool(dialogue_mode))
+    result = visual.write_visual_srt_script_556(self, observations, story, duration, language,
+                                                transcript=transcript or [], dialogue_mode=bool(dialogue_mode))
     self.repeat_hard_remaining = []
     self.repeat_warnings = []
     return result
@@ -38,7 +43,6 @@ def _writer(self, observations, story, duration, language, transcript=None, dial
 core.Pipeline.creative_plan = _plan
 core.Pipeline.write_srt_script = _writer
 
-# Preserve the clean 5.5.4 execution path, but add one job-boundary hygiene step.
 _original_execute = core.Pipeline.execute
 
 
