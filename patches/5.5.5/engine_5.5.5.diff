@@ -1,0 +1,54 @@
+--- a/engine.py
++++ b/engine.py
+@@
+-VERSION = "1.1.0-beta5.5.4-clean-installer"
++VERSION = "1.1.0-beta5.5.5-visual-grounded"
+@@
+ import numpy as np
+ from PIL import Image, ImageDraw, ImageFont
++from visual_srt_555 import write_visual_srt_script_555
+@@
+-        if task == "srt_only":
+-            # SRT-only deliberately ignores preserved-original-audio windows so
+-            # captions cover the full visual timeline from 00:00 to exact end.
+-            reserved = []
+-            _t = time.monotonic()
+-            creative_plan = self.creative_plan(story, duration)
+-            stage_times["narrative_plan_seconds"] = round(time.monotonic()-_t, 2)
+-            _t = time.monotonic()
+-            script = self.write_srt_script(observations, story, duration, language, transcript, dialogue_mode, creative_plan)
++        if task == "srt_only":
++            # 5.5.5 Visual-Grounded mode: SRT is a factual, information-rich
++            # intermediate script for later rewriting. Do not run GoldStyle,
++            # viral hook, trend, personality or semantic-template editors here.
++            # Preserve full visual timeline and keep dialogue context semantic-only.
++            reserved = []
++            creative_plan = {
++                "version": "5.5.5-visual-grounded",
++                "premise": str(story.get("setup", ""))[:900],
++                "story_arc": "Visual evidence timeline preserved from beginning to end.",
++                "verified_payoff": str(story.get("ending", ""))[:900],
++                "hook_promise": "",
++                "topic_lane": "visual_grounded",
++            }
++            stage_times["narrative_plan_seconds"] = 0.0
++            _t = time.monotonic()
++            script = write_visual_srt_script_555(
++                self,
++                observations,
++                story,
++                duration,
++                language,
++                transcript=transcript,
++                dialogue_mode=dialogue_mode,
++            )
+             stage_times["writer_editor_seconds"] = round(time.monotonic()-_t, 2)
+             write_json(self.out/"Script_Timeline.json", script)
+@@
+-                 "StoryFlow: AI viết mạch reviewer theo cửa sổ 20-30s trước, sau đó mới chia caption theo evidence đúng timestamp.\n"
++                 "5.5.5 Visual-Grounded: SRT bám evidence đúng timestamp, giữ chi tiết hình ảnh để viết lại sau; US ưu tiên 8-12 từ/caption, không ép đúng 10.\n"
+@@
+-                 "Anti-filler bắt cả lặp ý/công thức; không thay câu cụ thể bằng filler mẫu có sẵn.\n"
+-                 "Xem Creative_Plan.json + Narrative_Draft.json + Reviewer_QA.json để kiểm tra hook, mạch kể và chất reviewer.\n"
++                 "Chỉ exact duplicate là lỗi lặp cứng; hành động thật lặp lại được phép giống ý nếu đúng cảnh.\n"
++                 "Xem Visual_Context.json + Visual_SRT_QA.json để kiểm tra evidence, độ dài, fragment và các caption cần duyệt.\n"
