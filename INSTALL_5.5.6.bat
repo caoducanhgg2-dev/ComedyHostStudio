@@ -1,13 +1,13 @@
 @echo off
 setlocal EnableExtensions
-title Comedy Host Studio 5.5.6 Visual Quality + Stability
+title Comedy Host Studio 5.5.6 Visual Quality + Fast Stability
 
 set "APP=%LOCALAPPDATA%\Programs\ComedyHostStudio"
 if not "%~1"=="" set "APP=%~1"
 set "PKG=%~dp0"
 
 echo ============================================================
-echo  Comedy Host Studio 5.5.6 - Visual Quality + Stability
+echo  Comedy Host Studio 5.5.6 - Visual Quality + Fast Stability
 echo ============================================================
 echo.
 echo Thu muc app: "%APP%"
@@ -61,21 +61,22 @@ echo [4/6] Cai Runtime Stability + Memory Guard...
 copy /Y "%PKG%runtime_stability_556.py" "%APP%\runtime_stability_556.py" >NUL || goto ROLLBACK
 copy /Y "%PKG%memory_guard_556.py" "%APP%\memory_guard_556.py" >NUL || goto ROLLBACK
 
-echo [5/6] Thay engine bootstrap 5.5.6...
+echo [5/6] Thay engine bootstrap 5.5.6 Fast...
 copy /Y "%PKG%engine_556.py" "%APP%\engine.py" >NUL || goto ROLLBACK
 
 echo [6/6] Kiem tra sau cai dat...
-findstr /C:"beta5.5.6-visual-quality-stability" "%APP%\engine.py" >NUL 2>NUL || goto ROLLBACK
+findstr /C:"beta5.5.6-visual-quality-fast" "%APP%\engine.py" >NUL 2>NUL || goto ROLLBACK
 if not exist "%APP%\memory_guard_556.py" goto ROLLBACK
 if not exist "%APP%\visual_rules_556.py" goto ROLLBACK
 
 echo.
-echo [OK] Da cai 5.5.6.
-echo - SRT: dung hinh anh va giu chi tiet huu ich; khong ep 10 tu.
-echo - 8-12 tu la dep; 7-14 binh thuong; 15-18 duoc phep khi can chi tiet.
-echo - Bat fragment / cau cut dut; fallback khong cat raw evidence thanh manh cau.
-echo - Video tiep theo: giai phong model cu truoc khi dung lai GPU.
-echo - Memory Guard: giam Ollama batch khi RAM he thong thap de tranh HTTP 500.
+echo [OK] Da cai 5.5.6 FAST.
+echo - SRT: bam sat hinh anh, giu chi tiet huu ich; khong ep 10 tu.
+echo - 8-12 tu la dep; 7-14 binh thuong; 15-18 duoc phep neu can chi tiet.
+echo - Visual Brain -> Writer co handoff RAM/VRAM truc tiep, khong restart Ollama.
+echo - Ket thuc moi video se unload Writer de video tiep theo bat dau sach.
+echo - Memory Guard tu chon batch nhanh nhat phu hop RAM, tranh HTTP 500.
+echo - Dich Viet gom batch lon hon va bo 1 lan AI tom tat khong can thiet.
 echo - Khong dung VideoScriptAI, 5.5.3f/g/h hay PowerShell chen source.
 echo.
 pause
