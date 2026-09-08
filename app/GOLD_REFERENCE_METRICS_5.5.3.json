@@ -1,0 +1,27 @@
+{
+  "version": "5.5.3",
+  "us_rhythm_reference": {
+    "source": "user-approved RAMPE3 SRT reference",
+    "video_duration_seconds": 275.809,
+    "caption_count": 66,
+    "words_per_caption_min": 10,
+    "words_per_caption_average": 10.0,
+    "words_per_caption_max": 10,
+    "active_caption_seconds_average": 4.0804393939,
+    "inter_caption_gap_seconds": 0.1,
+    "timeline_density_wpm": 143.58
+  },
+  "us_style_reference": {
+    "source": "user-provided American reviewer/comedy style sample",
+    "use": "style only, never factual evidence",
+    "traits": [
+      "viewer-facing hook",
+      "American reviewer personality",
+      "mild observational humor",
+      "playful comparisons",
+      "compact reactions",
+      "curiosity bridges",
+      "clear payoff reaction"
+    ]
+  }
+}

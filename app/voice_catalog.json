@@ -1,0 +1,50 @@
+[
+  {
+    "id": "joe",
+    "name": "Joe",
+    "model": "en_US-joe-medium",
+    "speaker": null,
+    "suggestion": "Reaction · hài tình huống · thử thách",
+    "description": "Gợi ý: reaction, tình huống bất ngờ, thử thách. Mặc định cho comedy host; nghe thử để chọn chất giọng."
+  },
+  {
+    "id": "bryce",
+    "name": "Bryce",
+    "model": "en_US-bryce-medium",
+    "speaker": null,
+    "suggestion": "Bushcraft · sinh tồn · vlog",
+    "description": "Gợi ý: bushcraft, sinh tồn, trải nghiệm ngoài trời, vlog. Nhịp kể gần gũi; lời dẫn vẫn theo phong cách comedy reaction."
+  },
+  {
+    "id": "john",
+    "name": "John",
+    "model": "en_US-john-medium",
+    "speaker": null,
+    "suggestion": "Cải tạo · DIY · kể chuyện",
+    "description": "Gợi ý: cải tạo nhà, phục chế, DIY, câu chuyện theo quá trình. Phù hợp khi muốn nghe kể dài liền mạch."
+  },
+  {
+    "id": "norman",
+    "name": "Norman",
+    "model": "en_US-norman-medium",
+    "speaker": null,
+    "suggestion": "Lịch sử · bí ẩn · chuyện dài",
+    "description": "Gợi ý: chuyện lịch sử, bí ẩn, khám phá hoặc kể chuyện dài. Đây là gợi ý biên tập, không phải chế độ diễn xuất chuyên biệt."
+  },
+  {
+    "id": "srt_us",
+    "name": "SRT US",
+    "model": "en_US-joe-medium",
+    "speaker": null,
+    "suggestion": "Chỉ xuất SRT · US English",
+    "description": "SRT-only US: reviewer recap/reaction có hook, mạch kể và payoff; bám evidence nhưng không đọc hình kiểu máy. Bỏ tích Giữ thoại gốc = visual-only; tích = dùng hội thoại chỉ để hiểu ngữ cảnh, không chép transcript. Cảnh lặp dùng góc bình luận mới."
+  },
+  {
+    "id": "srt_jp",
+    "name": "SRT JP",
+    "model": "en_US-joe-medium",
+    "speaker": null,
+    "suggestion": "SRTのみ · 日本語",
+    "description": "SRT-only Nhật: reviewer hài nhẹ + ツッコミ, có hook và mạch kể; bám hình nhưng không chỉ liệt kê hành động. Hội thoại chỉ dùng để hiểu như review phim. Cảnh lặp đổi góc bình luận rồi quay lại review."
+  }
+]

@@ -1,0 +1,32 @@
+name: Comedy Host Studio 5.5.4 Clean Installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/comedyhost-554]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install compiler
+        shell: cmd
+        run: choco install nsis --yes --no-progress
+      - name: Extract, integrate, compile and verify installation
+        shell: cmd
+        run: python build\build_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ComedyHostStudio_Setup_5.5.4
+          path: dist/ComedyHostStudio_Setup_5.5.4.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-554
+          path: dist/*.txt

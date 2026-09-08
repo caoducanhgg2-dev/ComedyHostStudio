@@ -1,0 +1,111 @@
+{
+  "version": "US-local-2026-09-08-v3-goldstyle",
+  "country": "United States",
+  "language": "en-US",
+  "usage_target": 0.16,
+  "policy": "GoldStyle reference: confident American reviewer/comedy host. Style seeds only; factual claims must remain grounded. Target 10-word US captions on the Gold Rhythm timeline; light humor/reaction in selected lines, not every caption.",
+  "style_examples": [
+    "Okay, why is our DIY wizard building this right here?",
+    "That concrete layer says this build is basically a tank.",
+    "Secret weapon time, and suddenly this weird setup makes sense.",
+    "Boom, that fish just turned patience into a proper payoff.",
+    "Same grind, but every pass keeps upgrading this little monster.",
+    "No shortcuts here, just stubborn craftsmanship doing the heavy lifting.",
+    "Okay, that chainsaw just made ice carving look suspiciously easy.",
+    "This tiny detail looks boring until the whole plan clicks.",
+    "My guy clearly refuses to build anything the easy way.",
+    "And there it is, all that work finally earns applause."
+  ],
+  "categories": {
+    "hook": [
+      "Okay, why is this happening right here?",
+      "Wait, this weird setup definitely has a purpose.",
+      "Look closely, because this tiny detail changes everything next.",
+      "This looks simple, but the payoff says otherwise."
+    ],
+    "curiosity": [
+      "Now I need to see where this goes.",
+      "This is where the plan starts making sense.",
+      "And suddenly, that earlier step matters.",
+      "There is the detail that changes everything."
+    ],
+    "surprise": [
+      "Okay, that escalated fast.",
+      "Yeah, I did not see that coming.",
+      "Plot twist, the plan is not done yet.",
+      "Well, that changed the whole picture."
+    ],
+    "action": [
+      "Now the build is actually moving.",
+      "This part is doing the heavy lifting.",
+      "Here is where the progress finally shows.",
+      "Now we are getting somewhere."
+    ],
+    "progress_update": [
+      "Now the difference is actually visible.",
+      "That small step changed the whole look.",
+      "This is starting to look intentional.",
+      "And now the earlier work pays off."
+    ],
+    "story_review": [
+      "This is where the idea starts clicking.",
+      "Now the whole setup makes more sense.",
+      "That detail just changed the direction.",
+      "This is the part worth watching closely."
+    ],
+    "light_chatter": [
+      "No shortcuts here, this part is doing heavy lifting.",
+      "My guy clearly picked the hard way on purpose.",
+      "Tiny detail, surprisingly big upgrade to the whole build.",
+      "This boring step just earned itself some screen time."
+    ],
+    "dialogue_recap": [
+      "And that exchange changes the mood fast.",
+      "Now the conversation actually matters.",
+      "That reaction tells you plenty.",
+      "The mood just shifted right there."
+    ],
+    "payoff": [
+      "Boom, there is the payoff all that work earned.",
+      "Okay, now every strange little step finally makes sense.",
+      "And there it is, the build actually delivers.",
+      "That is one satisfying way to finish this project."
+    ],
+    "transition": [
+      "Now here is where it gets good.",
+      "And this is the turning point.",
+      "That is when the plan changes gears.",
+      "Now the next step actually matters."
+    ],
+    "survival": [
+      "This is where the shelter starts earning its keep.",
+      "Now the survival build actually looks practical.",
+      "That tiny detail matters a lot out here."
+    ],
+    "build": [
+      "This is where the build finally clicks.",
+      "Now the structure starts looking intentional.",
+      "That small change did more than it looked."
+    ],
+    "renovation": [
+      "Now the before-and-after starts showing.",
+      "This is where the renovation turns a corner.",
+      "That one change cleaned up the whole look."
+    ],
+    "food": [
+      "Okay, now the food challenge gets serious.",
+      "This is where the portion starts fighting back.",
+      "That bite just changed the whole mood."
+    ],
+    "challenge": [
+      "Now the challenge actually starts pushing back.",
+      "This is where confidence gets tested.",
+      "The easy part is officially over."
+    ],
+    "comedy": [
+      "Okay, that timing was perfect.",
+      "That reaction says everything.",
+      "Yeah, that went sideways fast."
+    ]
+  }
+}
