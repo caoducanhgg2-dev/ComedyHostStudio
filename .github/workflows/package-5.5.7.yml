@@ -8,6 +8,7 @@ on:
     paths:
       - 'engine_557.py'
       - 'visual_srt_557.py'
+      - 'visual_priority_557.py'
       - 'visual_srt_556.py'
       - 'visual_rules_556.py'
       - 'runtime_stability_556.py'
@@ -25,7 +26,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify syntax
-        run: python -m py_compile engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py
+        run: python -m py_compile engine_557.py visual_srt_557.py visual_priority_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py
       - name: Run regressions
         run: |
           python patches/5.5.7/test_visual_srt_557.py
@@ -34,7 +35,7 @@ jobs:
       - name: Stage package
         run: |
           mkdir ComedyHostStudio_5.5.7_Update
-          cp engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py INSTALL_5.5.7.bat README_5.5.7.txt ComedyHostStudio_5.5.7_Update/
+          cp engine_557.py visual_srt_557.py visual_priority_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py INSTALL_5.5.7.bat README_5.5.7.txt ComedyHostStudio_5.5.7_Update/
       - uses: actions/upload-artifact@v4
         with:
           name: ComedyHostStudio_5.5.7_Update
