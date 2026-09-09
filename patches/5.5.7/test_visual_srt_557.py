@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 SPEC = importlib.util.spec_from_file_location("visual_srt_557", ROOT / "visual_srt_557.py")
 M = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(M)
