@@ -12,6 +12,7 @@ import sys
 import engine_554_core as core
 import visual_srt_557 as visual
 from visual_rules_556 import fragment_issue
+from visual_priority_557 import install_priority_fallback
 from runtime_stability_556 import prepare_consecutive_job, prepare_writer_phase, finish_job
 from memory_guard_556 import install_memory_guard
 
@@ -19,6 +20,7 @@ VERSION = "1.1.0-beta5.5.7-visual-continuity-fast"
 core.VERSION = VERSION
 
 install_memory_guard(core)
+install_priority_fallback(visual)
 
 
 def _plan(self, story, duration):
