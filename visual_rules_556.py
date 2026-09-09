@@ -1,5 +1,6 @@
-"""Standalone sentence-completeness rules for 5.5.6.
-Kept separate so the release can regression-test grammar rules independently.
+"""Standalone sentence-completeness rules used by Visual Continuity SRT.
+The detector is deliberately conservative: it catches obvious fragments without
+rejecting valid factual sentences from varied video topics.
 """
 from __future__ import annotations
 
@@ -15,13 +16,19 @@ FINITE = {
     "crosses","cross","continues","continue","leads","lead","extends","extend","contains","contain","includes","include",
     "surrounds","surround","covers","cover","indicates","indicate","describes","describe","reveals","reveal",
     "looks","look","sweeps","sweep","travels","travel","follows","follow","heads","head","leaves","leave",
-    "wears","wear","pulls","pull","pushes","push","raises","raise","lowers","lower","holds","hold"
+    "wears","wear","pushes","push","raises","raise","lowers","lower",
+    "swims","swim","rises","rise","sinks","sink","floats","float","drifts","drift","circles","circle",
+    "darts","dart","glides","glide","bubbles","bubble","flows","flow","splashes","splash","wiggles","wiggle",
+    "shakes","shake","shifts","shift","rotates","rotate","rolls","roll","falls","fall","drops","drop",
+    "runs","run","jumps","jump","crawls","crawl","drives","drive","rides","ride","pours","pour","fills","fill",
+    "washes","wash","brushes","brush","scrapes","scrape","digs","dig","plants","plant","picks","pick",
 }
 BAD_STARTS = {"with","then","and","but","which","because","while","although","though","unless","as","surrounded"}
 GERUND_STARTS = {
     "approaching","walking","moving","showing","revealing","carrying","holding","placing","adding","cutting",
     "building","stacking","opening","closing","entering","leaving","standing","sitting","kneeling","arranging",
-    "cleaning","removing","installing","crossing","following","trimming","clearing","pulling","lifting"
+    "cleaning","removing","installing","crossing","following","trimming","clearing","pulling","lifting",
+    "swimming","rising","sinking","floating","drifting","circling","running","jumping","pouring","digging",
 }
 BAD_ENDS = {
     "than","what","which","who","whom","whose","because","while","although","though","until","if","and","but","or",
@@ -58,8 +65,6 @@ def fragment_issue(text, language="en"):
         return "starts like a visual-log fragment"
     if last in BAD_ENDS:
         return "ends with dangling/incomplete word"
-    # Material nouns like glass/stone/brick/metal are valid sentence endings.
-    # Flag adjective endings only when they are grammatically stranded.
     if last in INCOMPLETE_ADJECTIVE_END and len(ws) >= 2 and ws[-2] in {"a","an","the","from","toward","of"}:
         return "ends with stranded adjective"
     if not any(w in FINITE for w in ws):
