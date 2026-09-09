@@ -1,7 +1,7 @@
 # SRT Voice Studio — Clean rebuild 1.0.0
 
-**Trạng thái: mã nguồn và workflow đã chuẩn bị; chưa có bộ cài Windows đã xác minh.**
-Không coi bản này là hoàn thành cho tới khi GitHub Actions tạo bộ cài và các gate Windows đều đạt.
+**Trạng thái build: xem GitHub Actions trên nhánh `srt-voice-studio/clean-build`.**
+Chỉ tải bộ cài từ lần chạy đã đạt toàn bộ kiểm thử. File `acceptance.json` đi kèm artifact ghi kết quả thực thi của đúng bộ cài đó.
 
 ## Sử dụng bản đã đóng gói
 
@@ -11,7 +11,7 @@ Không coi bản này là hoàn thành cho tới khi GitHub Actions tạo bộ c
 4. Bấm Preview Voice để nghe một câu, nếu cần.
 5. Bấm GENERATE MP3, chọn nơi lưu. Kết quả duy nhất là `TênFile_Voice.mp3`.
 
-Bộ cài dự kiến chứa runtime, Qt, model Kokoro, toàn bộ voice, từ điển và FFmpeg/FFprobe.
+Bộ cài chứa runtime, Qt, model Kokoro, toàn bộ voice, từ điển và FFmpeg/FFprobe.
 Không tải Python hoặc model khi cài/chạy. Không tài khoản, không API key, không CUDA.
 Windows 10/11 x64 là mục tiêu. Bản đầu dùng CPU, giới hạn tối đa 6 luồng ONNX.
 
@@ -81,7 +81,7 @@ Workflow: `.github/workflows/windows-build.yml`, runner `windows-latest`, Python
 9. Chỉ upload installer khi mọi gate đạt; luôn lưu log build để sửa lỗi nếu có.
 
 Repo phải có Actions được bật và công cụ kết nối phải có quyền ghi workflow.
-Môi trường Work hiện tại chưa chạy workflow; không có artifact `.exe` nào được chứng nhận.
+Workflow đã được chạy trên GitHub Actions. Xem kết quả của từng lần chạy, không suy luận trạng thái chỉ từ mã nguồn.
 Runner là Windows Server của GitHub; gate này không thay thế thử nghiệm trên Windows 10/11 máy sạch.
 Test GUI tự động không kiểm tra âm thanh qua loa hay chất lượng giọng bằng tai.
 

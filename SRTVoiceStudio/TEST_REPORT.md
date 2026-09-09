@@ -1,3 +1,27 @@
+# Windows build đã xác minh — 09/09/2026
+
+- GitHub Actions run: https://github.com/caoducanhgg2-dev/ComedyHostStudio/actions/runs/34382171196
+- Commit build: 78fc14ffd4569906284584171f76894077310789
+- Kết quả workflow: SUCCESS.
+- 18 test parser/timeline/FFmpeg đạt trên Windows runner.
+- Frozen app: English và tất cả 5 voice Japanese tạo audio thật thành công.
+- Đường dẫn cài có dấu tiếng Việt, PATH không có Python, PYTHONHOME/PYTHONPATH giả, TEMP không tồn tại: đạt.
+- Installer: cài, mở UI, sinh MP3 khi chặn mạng, gỡ cài: đạt.
+- MP3 English/Japanese test: 9,420 giây, 0 overlap; giữ silence đầu file.
+- SHA-256 installer: 108d022d41ddc53fd089b01ce0bfb6edeced385504829f73655cf3ca8c13f31a
+- Kích thước installer: 460942537 byte.
+
+Đã sửa lỗi native phonemizer khi cài ở đường dẫn Unicode bằng đường dẫn ngắn Windows
+và manifest UTF-8. Không yêu cầu thay đổi thiết lập ngôn ngữ hệ thống.
+
+Đây là kiểm thử tự động trên Windows runner, chưa thay thế nghiệm thu trên máy Windows 10/11
+của người dùng và đánh giá giọng bằng tai. 74 caption dùng synth thử trong unit test;
+không tuyên bố đã kiểm tra 74 caption bằng giọng thật.
+
+---
+
+## Nhật ký ban đầu trước khi build Windows
+
 # Báo cáo kiểm tra — 09/09/2026
 
 ## Đã thực thi tại Work (Linux x86_64, Python 3.12)
