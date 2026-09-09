@@ -12,6 +12,7 @@ Sua theo test Vietnamese_Translation(8).txt:
 - "flame-like object" duoc trung hoa ve visible object thay vi suy dien hinh dang.
 - Neu boi canh khong thay doi (aquarium/gravel/filter/bubbles...), caption sau khong lap lai toan bo boilerplate; uu tien chi tiet moi dang thay doi.
 - Exact duplicate chi sua caption bi loi; similarity cua hanh dong that chi la warning/repair best-effort.
+- Regression bat buoc dung chinh cac mau loi tren de tranh tai xuat hien o ban sau.
 
 Toc do:
 - Writer batch 10 caption tren Qwen3 8B, 8 caption tren writer nho hon.
