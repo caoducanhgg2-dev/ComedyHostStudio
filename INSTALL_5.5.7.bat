@@ -27,7 +27,7 @@ if not exist "%APP%\engine.py" (
   exit /b 11
 )
 
-for %%F in (engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py) do (
+for %%F in (engine_557.py visual_srt_557.py visual_priority_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py) do (
   if not exist "%PKG%%%F" (
     echo [LOI] Goi cai dat thieu %%F.
     pause
@@ -55,6 +55,7 @@ copy /Y "%APP%\engine.py" "%APP%\engine.before_5.5.7.bak.py" >NUL || goto FAIL
 
 echo [3/7] Cai Visual Continuity writer...
 copy /Y "%PKG%visual_srt_557.py" "%APP%\visual_srt_557.py" >NUL || goto ROLLBACK
+copy /Y "%PKG%visual_priority_557.py" "%APP%\visual_priority_557.py" >NUL || goto ROLLBACK
 copy /Y "%PKG%visual_srt_556.py" "%APP%\visual_srt_556.py" >NUL || goto ROLLBACK
 copy /Y "%PKG%visual_rules_556.py" "%APP%\visual_rules_556.py" >NUL || goto ROLLBACK
 
@@ -68,6 +69,7 @@ copy /Y "%PKG%engine_557.py" "%APP%\engine.py" >NUL || goto ROLLBACK
 echo [6/7] Kiem tra source sau cai dat...
 findstr /C:"beta5.5.7-visual-continuity-fast" "%APP%\engine.py" >NUL 2>NUL || goto ROLLBACK
 findstr /C:"5.5.7-visual-continuity" "%APP%\visual_srt_557.py" >NUL 2>NUL || goto ROLLBACK
+if not exist "%APP%\visual_priority_557.py" goto ROLLBACK
 
 echo [7/7] Hoan tat.
 echo.
@@ -75,6 +77,7 @@ echo [OK] Da cai 5.5.7 Visual Continuity + Fast.
 echo - Chan ro ri TIME/frame/timestamp/so ky thuat vao SRT.
 echo - Moi caption uu tien 1 cau tu nhien, co chi tiet hinh anh huu ich.
 echo - Khong lap lai boi canh khong thay doi o cac caption lien tiep.
+echo - Uu tien chi tiet moi/khac biet khi fallback thay vi boi canh tinh.
 echo - 8-12 tu la dep; 7-14 binh thuong; 15-18 duoc phep khi can chi tiet.
 echo - Exact duplicate sua tung caption, khong huy ca SRT.
 echo - Giu Memory Guard, GPU handoff va clean video lien tiep cua 5.5.6.
