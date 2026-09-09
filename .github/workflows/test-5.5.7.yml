@@ -1,0 +1,26 @@
+name: Test 5.5.7 Visual Continuity
+
+on:
+  push:
+    branches:
+      - 5.5.7-visual-continuity
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax check
+        run: python -m py_compile engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py patches/5.5.7/test_visual_srt_557.py patches/5.5.6/test_runtime_stability_556.py patches/5.5.6/test_memory_guard_556.py
+      - name: 5.5.7 aquarium regression
+        run: python patches/5.5.7/test_visual_srt_557.py
+      - name: Consecutive-run regression
+        run: python patches/5.5.6/test_runtime_stability_556.py
+      - name: Low-RAM regression
+        run: python patches/5.5.6/test_memory_guard_556.py
