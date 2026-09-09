@@ -34,6 +34,8 @@ jobs:
         run: python -m pytest -q --junitxml=test-results.xml
       - name: Build frozen app
         run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+      - name: Test frozen app before installer
+        run: python build_tools/check_frozen.py
       - name: Build installer
         shell: cmd
         run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
@@ -52,6 +54,13 @@ jobs:
             SRTVoiceStudio/installer-output/SHA256SUMS.txt
             SRTVoiceStudio/installer-output/acceptance.json
           if-no-files-found: error
+      - name: Collect app logs
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Force ci-logs | Out-Null
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/logs/latest.log" ci-logs/latest.log -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/self-test.json" ci-logs/self-test.json -ErrorAction SilentlyContinue
+          exit 0
       - name: Build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,4 +71,4 @@ jobs:
             SRTVoiceStudio/installed-dependencies.txt
             SRTVoiceStudio/build-assets/sha256.json
             SRTVoiceStudio/build/SRTVoiceStudio/warn-SRTVoiceStudio.txt
-            ~/AppData/Local/SRTVoiceStudio/logs/latest.log
+            SRTVoiceStudio/ci-logs/

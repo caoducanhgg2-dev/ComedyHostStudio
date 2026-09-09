@@ -30,6 +30,10 @@ try:
         raise RuntimeError(data)
     (root/'installer-output'/'acceptance.json').write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
 finally:
+    for name in ('self-test.json','logs/latest.log'):
+        log=Path(os.environ['LOCALAPPDATA'])/'SRTVoiceStudio'/name
+        if log.exists():
+            print(log.read_text('utf-8',errors='replace')[-20000:],flush=True)
     subprocess.run(['netsh','advfirewall','firewall','delete','rule',f'name={rule}'],check=False)
     if (dest/'unins000.exe').exists():
         subprocess.run([str(dest/'unins000.exe'),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'],check=True,timeout=180)
