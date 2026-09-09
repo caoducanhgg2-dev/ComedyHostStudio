@@ -1,5 +1,8 @@
 """Test the installed app under a Unicode path and a PATH without Python."""
 import os
+import sys
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from pathlib import Path
 import subprocess
 import json
