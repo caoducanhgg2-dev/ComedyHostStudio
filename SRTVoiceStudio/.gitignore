@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+.venv/
+build/
+dist/
+bin/
+models/
+build-assets/
+installer-output/
+*.mp3
+*.wav
+*.raw
