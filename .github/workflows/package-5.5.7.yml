@@ -1,0 +1,42 @@
+name: Package 5.5.7
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 5.5.7-visual-continuity
+    paths:
+      - 'engine_557.py'
+      - 'visual_srt_557.py'
+      - 'visual_srt_556.py'
+      - 'visual_rules_556.py'
+      - 'runtime_stability_556.py'
+      - 'memory_guard_556.py'
+      - 'INSTALL_5.5.7.bat'
+      - 'README_5.5.7.txt'
+      - 'patches/5.5.7/test_visual_srt_557.py'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify syntax
+        run: python -m py_compile engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py
+      - name: Run regressions
+        run: |
+          python patches/5.5.7/test_visual_srt_557.py
+          python patches/5.5.6/test_runtime_stability_556.py
+          python patches/5.5.6/test_memory_guard_556.py
+      - name: Stage package
+        run: |
+          mkdir ComedyHostStudio_5.5.7_Update
+          cp engine_557.py visual_srt_557.py visual_srt_556.py visual_rules_556.py runtime_stability_556.py memory_guard_556.py INSTALL_5.5.7.bat README_5.5.7.txt ComedyHostStudio_5.5.7_Update/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ComedyHostStudio_5.5.7_Update
+          path: ComedyHostStudio_5.5.7_Update
+          if-no-files-found: error
