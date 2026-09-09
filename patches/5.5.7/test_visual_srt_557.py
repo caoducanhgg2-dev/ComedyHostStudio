@@ -9,6 +9,8 @@ sys.path.insert(0, str(ROOT))
 SPEC = importlib.util.spec_from_file_location("visual_srt_557", ROOT / "visual_srt_557.py")
 M = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(M)
+from visual_priority_557 import install_priority_fallback
+install_priority_fallback(M)
 
 
 def test_timestamp_number_leak_is_removed():
