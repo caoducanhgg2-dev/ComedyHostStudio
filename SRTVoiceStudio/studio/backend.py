@@ -1,7 +1,7 @@
 import hashlib
 import json
 import os
-from .paths import root
+from .paths import root, native_data_path
 from .audio import check_cancel
 
 EN_VOICES = ['af_heart', 'af_alloy', 'af_aoede', 'af_bella', 'af_jessica',
@@ -43,7 +43,13 @@ class Backend:
         opts.inter_op_num_threads = 1
         session = ort.InferenceSession(str(folder/'kokoro-v1.0.onnx'), sess_options=opts,
                                        providers=['CPUExecutionProvider'])
-        self.model = Kokoro.from_session(session, str(folder/'voices-v1.0.bin'))
+        progress('ONNX đã nạp • Đang nạp phonemizer')
+        import espeakng_loader
+        from kokoro_onnx.config import EspeakConfig
+        config = EspeakConfig(lib_path=espeakng_loader.get_library_path(),
+                              data_path=native_data_path(espeakng_loader.get_data_path()))
+        self.model = Kokoro.from_session(session, str(folder/'voices-v1.0.bin'), espeak_config=config)
+        progress('Phonemizer đã nạp')
         missing = set(EN_VOICES + JA_VOICES) - set(self.model.get_voices())
         if missing:
             self.model = None

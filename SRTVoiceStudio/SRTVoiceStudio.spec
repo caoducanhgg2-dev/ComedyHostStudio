@@ -20,5 +20,5 @@ a = Analysis([str(root/'main.py')],pathex=[str(root)],binaries=binaries,datas=da
     hiddenimports=hiddenimports,excludes=['tkinter','torch','spacy','transformers','pyopenjtalk','pytest'])
 pyz = PYZ(a.pure)
 exe = EXE(pyz,a.scripts,[],exclude_binaries=True,name='SRTVoiceStudio',console=False,
-          debug=False,strip=False,upx=False)
+          debug=False,strip=False,upx=False,manifest=str(root/'app.manifest'))
 coll = COLLECT(exe,a.binaries,a.datas,strip=False,upx=False,name='SRTVoiceStudio')

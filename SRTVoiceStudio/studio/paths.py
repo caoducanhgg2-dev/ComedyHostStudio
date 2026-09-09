@@ -40,3 +40,26 @@ def executable(name):
         if found:
             return found
     raise RuntimeError(f'Thiếu {name} trong bộ cài. Hãy cài lại ứng dụng.')
+
+def native_data_path(path):
+    """ASCII short path for native libraries using narrow CRT fopen on Windows."""
+    value = str(path)
+    if sys.platform != 'win32' or value.isascii():
+        return value
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    short = kernel.GetShortPathNameW
+    short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+    short.restype = wintypes.DWORD
+    needed = short(value, None, 0)
+    if needed:
+        buffer = ctypes.create_unicode_buffer(needed)
+        written = short(value, buffer, needed)
+        if written and written < needed and buffer.value.isascii():
+            return buffer.value
+    # Modern Windows uses the UTF-8 codepage declared in app.manifest.
+    if kernel.GetACP() == 65001:
+        return value
+    raise RuntimeError('Thư viện giọng không đọc được đường dẫn cài đặt này. '
+                       'Hãy chọn đường dẫn không dấu hoặc dùng Windows 10 1903 trở lên.')
