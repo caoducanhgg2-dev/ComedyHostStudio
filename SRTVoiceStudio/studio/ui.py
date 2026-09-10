@@ -66,8 +66,10 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('SRT Voice Studio ' + __version__)
-        self.setMinimumSize(980, 730)
-        self.resize(1340, 940)
+        available=self.screen().availableGeometry()
+        self.setMinimumSize(min(980,max(700,available.width()-40)),min(690,max(460,available.height()-60)))
+        self.resize(min(1340,max(self.minimumWidth(),available.width()-40)),
+                    min(940,max(self.minimumHeight(),available.height()-60)))
         self.setAcceptDrops(True)
         self.backend = Backend()
         self.worker = None
@@ -493,6 +495,7 @@ class Window(QMainWindow):
         self.status.setText('Không hoàn tất · ' + message)
         box = QMessageBox(QMessageBox.Critical, 'SRT Voice Studio', message, parent=self)
         box.setDetailedText(details)
+        box.setStandardButtons(QMessageBox.Ok)
         box.button(QMessageBox.Ok).setText('Đóng')
         box.exec()
 
