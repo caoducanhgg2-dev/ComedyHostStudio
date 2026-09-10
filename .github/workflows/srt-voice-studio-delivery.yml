@@ -1,0 +1,85 @@
+name: Package verified SRT Voice Studio delivery
+on:
+  push:
+    branches: ['srt-voice-studio/1.1.0']
+    paths: ['.github/workflows/srt-voice-studio-delivery.yml']
+permissions:
+  actions: read
+  contents: read
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.1.0
+          path: verified
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          run-id: 34472581469
+      - name: Verify and split exact installer without rebuilding
+        shell: python
+        run: |
+          import pathlib,hashlib,json,shutil
+          base=pathlib.Path('verified')
+          exe=next(base.rglob('SRTVoiceStudio_Setup_1.1.0.exe'))
+          checksum=next(base.rglob('SHA256SUMS.txt'))
+          expected=checksum.read_text(encoding='utf-8-sig').split()[0].lower()
+          actual=hashlib.sha256(exe.read_bytes()).hexdigest()
+          assert actual==expected
+          out=pathlib.Path('delivery');out.mkdir()
+          parts=[]
+          with exe.open('rb') as f:
+              for i in range(7):
+                  data=f.read(64*1024*1024)
+                  assert data
+                  name=f'installer.part{i}'
+                  (out/name).write_bytes(data)
+                  parts.append(dict(name=name,bytes=len(data),sha256=hashlib.sha256(data).hexdigest()))
+              assert not f.read(1)
+          (out/'manifest.json').write_text(json.dumps(dict(filename=exe.name,bytes=exe.stat().st_size,sha256=actual,build_commit='33fea46f83c3ab360ece2567915412037b5ecbf3',build_run=34472581469,parts=parts),indent=2))
+          shutil.copy(checksum,out)
+          shutil.copy(next(base.rglob('acceptance.json')),out)
+          print('Verified installer SHA256:',actual)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part0
+          path: delivery/installer.part0
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part1
+          path: delivery/installer.part1
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part2
+          path: delivery/installer.part2
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part3
+          path: delivery/installer.part3
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part4
+          path: delivery/installer.part4
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part5
+          path: delivery/installer.part5
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-part6
+          path: delivery/installer.part6
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-delivery-metadata
+          path: |
+            delivery/manifest.json
+            delivery/SHA256SUMS.txt
+            delivery/acceptance.json
