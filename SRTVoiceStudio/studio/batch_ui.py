@@ -14,7 +14,7 @@ from .timeline import display_time
 class ItemEditor(QDialog):
     def __init__(self, item, parent):
         super().__init__(parent);self.setWindowTitle('Cấu hình riêng cho tệp')
-        self.settings=item.settings
+        self.settings=item.settings;self.backend=parent.window.backend
         form=QFormLayout(self)
         self.controls={}
         for key,label,mapping in [('language','Ngôn ngữ',vi.LANGUAGES),('voice','Giọng đọc',{}),
@@ -34,8 +34,8 @@ class ItemEditor(QDialog):
         self.refresh()
     def voices(self):
         c=self.controls['voice'];c.clear()
-        choices=JA_VOICES if self.controls['language'].currentData()=='Japanese' else EN_VOICES
-        for voice in choices:c.addItem(vi.voice_label(voice),voice)
+        choices=[v for v in self.backend.list_voices() if v.language==self.controls['language'].currentData()]
+        for voice in choices:c.addItem(vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name,voice.id)
     def refresh(self):
         manual=self.controls['emotion_mode'].currentData()=='Manual'
         for k in ('emotion','intensity'):self.controls[k].setEnabled(manual)

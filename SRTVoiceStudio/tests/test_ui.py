@@ -38,3 +38,23 @@ def test_error_dialog_has_localized_close_button(app,monkeypatch):
         assert seen==[('Đóng','CÂU 1 QUÁ DÀI')]
     finally:
         w.close();w.deleteLater();app.processEvents()
+
+def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,monkeypatch):
+    monkeypatch.setenv('LOCALAPPDATA',str(tmp_path))
+    w=Window()
+    try:
+        p=w.voice_panel
+        assert p.list.count()==25
+        p.filter.setCurrentIndex(p.filter.findData('ja'))
+        assert p.list.count()==5
+        selected=p.selected().id;p.toggle_favorite()
+        p.filter.setCurrentIndex(p.filter.findData('favorites'))
+        assert p.list.count()==1 and p.selected().id==selected
+        p.select_voice()
+        assert w.settings().voice==selected and w.settings().language=='Japanese'
+        p.filter.setCurrentIndex(p.filter.findData('recommended'))
+        assert p.list.count()==0 and 'Chưa có' in p.status.text()
+        from studio.preferences import read
+        assert read()['favorite_voices']==[selected]
+    finally:
+        w.close();w.deleteLater();app.processEvents()

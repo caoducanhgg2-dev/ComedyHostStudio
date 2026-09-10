@@ -21,7 +21,7 @@ def test_underfill_2_8_seconds_hard_floor_warning(context):
     b,r=fit_processed(a,rate,slot,Settings(),1,folder,cancel)
     assert r['speed']==.88 and 3.12<len(b)/RATE<3.23
     assert .77<r['trailing_silence']<.89 and r['underfilled']
-    assert r['warning']=='SHORT SCRIPT / UNDERFILLED SLOT'
+    assert r['warning']=='SHORT SCRIPT / REMAINING SILENCE'
     assert r['end_sample']+4800<=round(4.1*RATE) and r['start_sample']==0 and r['overlaps']==0
 
 @pytest.mark.parametrize('duration',[3.36,3.5,3.6])
@@ -37,6 +37,23 @@ def test_adaptive_off_does_not_slow(context):
     slot=slots_for([Caption(1,0,4000,'test')])[0]
     _,r=fit_processed(a,rate,slot,Settings(adaptive=False),1,folder,cancel)
     assert r['speed']==1 and not r['slow_down'] and r['underfilled']
+
+@pytest.mark.parametrize('requested',[1.0,1.15,1.2])
+def test_v2_classifies_processed_audio_before_user_speed(context,requested):
+    folder,cancel=context;a,rate=CountingBackend(3.6).synthesize()
+    slot=slots_for([Caption(1,5100,9100,'test')])[0]
+    _,r=fit_processed(a,rate,slot,Settings(speed=requested),1,folder,cancel)
+    assert r['classification']=='UNDERFILL'
+    assert .88<=r['speed']<=1 and r['fit_tempo']<=1
+    assert .1<=r['trailing_silence']<=.3
+    assert r['start_sample']==5100*48 and r['end_sample']<=9100*48
+
+def test_v2_residual_below_warning_threshold_is_not_overlap(context):
+    folder,cancel=context;a,rate=CountingBackend(3.0).synthesize()
+    slot=slots_for([Caption(1,0,4000,'test')])[0]
+    _,r=fit_processed(a,rate,slot,Settings(),1,folder,cancel)
+    assert r['speed']==.88 and .4<r['trailing_silence']<.8
+    assert not r['warning'] and r['overlaps']==0
 
 @pytest.mark.parametrize('emotion',['Natural','Excited','Sad'])
 def test_underfill_c_production_identical_combined_floor(context,emotion):

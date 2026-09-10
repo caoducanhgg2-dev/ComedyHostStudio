@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, Q
     QLabel, QLineEdit, QPushButton, QComboBox, QDoubleSpinBox, QCheckBox, QProgressBar,
     QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox, QGridLayout, QPlainTextEdit, QTabWidget)
 from .backend import Backend, EN_VOICES, JA_VOICES, PREVIEW
+from .voice_backends import BackendRouter
 from .render import render, Settings
 from .paths import workspace
 from .audio import Cancelled, wav_bytes
@@ -75,7 +76,7 @@ class Window(QMainWindow):
         self.resize(min(1340,max(self.minimumWidth(),available.width()-40)),
                     min(940,max(self.minimumHeight(),available.height()-60)))
         self.setAcceptDrops(True)
-        self.backend = Backend()
+        self.backend = BackendRouter()
         self.worker = None
         self.output = None
         self.preview_temp = None  # Compatibility: previews now use memory only.
@@ -253,6 +254,8 @@ class Window(QMainWindow):
         self.speed.valueChanged.connect(self.style_changed); self.adaptive.toggled.connect(self.style_changed); self.normalize.toggled.connect(self.style_changed)
         from .batch_ui import BatchPanel
         self.batch_panel=BatchPanel(self);self.tabs.addTab(self.batch_panel,'Hàng đợi xử lý')
+        from .voice_ui import VoicePanel
+        self.voice_panel=VoicePanel(self);self.tabs.addTab(self.voice_panel,'Thư viện giọng')
         self.language_changed(); self.refresh_controls()
         menu=self.menuBar().addMenu('Cấu hình')
         menu.addAction('Lưu cấu hình hiện tại').triggered.connect(self.save_preferences)
@@ -282,9 +285,9 @@ class Window(QMainWindow):
 
     def language_changed(self, *_):
         language=self.language.currentData()
-        choices=JA_VOICES if language=='Japanese' else EN_VOICES
+        choices=[v for v in self.backend.list_voices() if v.language==language]
         self.voice.clear()
-        for voice in choices:self.voice.addItem(vi.voice_label(voice),voice)
+        for voice in choices:self.voice.addItem(vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name,voice.id)
         self.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
         if self.caption_select.currentData() is None:self.preview_text.setText(PREVIEW[language])
         self.invalidate_base()
@@ -521,7 +524,7 @@ class Window(QMainWindow):
                 f"Cảm xúc: {vi.display(result['emotion_mode'])} / {emotion_label} · Hiệu ứng: {vi.display(result['effect'])} / {vi.display(result['strength'])}\n"
                 f"Tăng tốc: {result['speed_up_captions']} · Giảm tốc: {result['slow_down_captions']} · Cắt an toàn: {trimmed}\n"
                 f"Chưa lấp đầy: {underfilled} · Còn thiếu ở giới hạn 0.88×: {result['underfilled_after_hard_minimum']}\n"
-                f"Im lặng cuối khung — Trung bình: {result['average_trailing_silence']:.3f} giây · Lớn nhất: {result['maximum_trailing_silence']:.3f} giây\n"
+                f"Im lặng cuối khung — Trung bình: {result['average_trailing_silence']:.3f} giây · Trung vị: {result['median_trailing_silence']:.3f} giây · Lớn nhất: {result['maximum_trailing_silence']:.3f} giây\n"
                 f"{result['overlaps']} chồng tiếng · MỐC THỜI GIAN HỢP LỆ")
 
     def cancel_job(self):

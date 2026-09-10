@@ -13,6 +13,8 @@ OVERFLOWS={'Safe Trim':'Cắt an toàn','Stop and Report':'Dừng và báo lỗi
 PREVIEW_LABELS={'A':'A · Giọng gốc','B':'B · Đã xử lý','C':'C · Theo mốc SRT'}
 
 def voice_label(voice):
+    if not isinstance(voice,str):return 'Chưa chọn giọng'
+    if len(voice)<4 or voice[:3] not in ('af_','am_','jf_','jm_'):return voice
     name=voice.split('_',1)[1].replace('_',' ').title()
     gender='Nữ' if voice[1]=='f' else 'Nam'
     if voice=='am_onyx':return 'Onyx — Nam · Trầm / Kể chuyện'
@@ -24,6 +26,7 @@ def display(value):
     return value
 
 def message(text):
+    if text == 'SHORT SCRIPT / REMAINING SILENCE':return 'CÂU THOẠI NGẮN / CÒN KHOẢNG LẶNG'
     replacements={
      'SHORT SCRIPT / UNDERFILLED SLOT':'LỜI THOẠI NGẮN / CHƯA LẤP ĐẦY KHUNG',
      'TIMELINE VALID':'MỐC THỜI GIAN HỢP LỆ','Creating voice':'Đang tạo giọng',

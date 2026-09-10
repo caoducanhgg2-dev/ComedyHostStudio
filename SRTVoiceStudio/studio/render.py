@@ -85,6 +85,8 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                        underfilled_captions=sum(r['underfilled'] for r in records),
                        underfilled_after_hard_minimum=sum(r['underfilled_at_hard_minimum'] for r in records),
                        average_trailing_silence=sum(r['trailing_silence'] for r in records)/len(records),
+                       median_trailing_silence=float(np.median([r['trailing_silence'] for r in records])),
+                       transitions_over_08=sum((slots[i+1].start-r['end_sample'])/RATE > .8 for i,r in enumerate(records[:-1])),
                        maximum_trailing_silence=max(r['trailing_silence'] for r in records),
                        safely_trimmed=sum(r['trimmed'] for r in records),
                        duration=display_time(end_ms), duration_ms=end_ms, records=records)

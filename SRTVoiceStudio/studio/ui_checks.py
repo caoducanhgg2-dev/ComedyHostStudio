@@ -76,7 +76,7 @@ class UiChecks:
                 w.preview_buttons[2].click()
             elif self.stage==4:
                 assert self.calls==2 and w.preview_cache.details['speed']==.88
-                assert 'LỜI THOẠI NGẮN / CHƯA LẤP ĐẦY KHUNG' in w.preview_details.text()
+                assert 'CÂU THOẠI NGẮN / CÒN KHOẢNG LẶNG' in w.preview_details.text()
                 assert w.voice.currentData()=='af_heart' and 'Heart' in w.voice.currentText()
                 assert w.generate.text()=='▶  TẠO MP3'
                 w.grab().save(str(data_dir()/'ui-preview.png'))
