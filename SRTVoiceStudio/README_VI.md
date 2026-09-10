@@ -1,114 +1,72 @@
 # SRT Voice Studio 1.1.0
 
-**Trạng thái build: xem GitHub Actions trên nhánh `srt-voice-studio/1.1.0`.**
-Chỉ tải bộ cài từ lần chạy đã đạt toàn bộ kiểm thử. File `acceptance.json` đi kèm artifact ghi kết quả thực thi của đúng bộ cài đó.
+Nâng cấp trực tiếp từ bản 1.0.0: giữ Kokoro/ONNX, âm vị tiếng Nhật, 20 giọng Mỹ,
+5 giọng Nhật và mốc SRT cố định. Một MP3 mono 48 kHz / 192 kbps duy nhất.
+Không cần API, mạng, Python, FFmpeg hay CUDA trên máy người dùng.
 
-## Sử dụng bản đã đóng gói
+## Sử dụng
 
-1. Chạy `SRTVoiceStudio_Setup.exe`, bấm Next → Install → Finish.
-2. Mở SRT Voice Studio từ Start Menu hoặc shortcut.
-3. Browse/kéo vào một SRT UTF-8. Chọn English US hoặc Japanese và voice.
-4. Mặc định Manual / Natural / None giữ giọng sạch. Có thể chọn Emotion / Performance, Intensity, Voice Effect và Strength. Auto dùng rule local riêng cho English và Japanese.
-5. A Original nghe TTS gốc; B Processed dùng cùng audio A qua DSP. Đổi style không tổng hợp lại A. Chọn Preview Caption trong SRT để nghe C Final Timeline sau fit/trim/normalize. Sửa Preview Text sẽ trở về custom và tắt C.
-6. C hiển thị slot, độ dài A/B/C, effective speed, trim và overlap. Safe Trim có thể cắt mất từ cuối câu; nghe C để kiểm tra.
-7. Bấm GENERATE MP3, chọn nơi lưu. Kết quả duy nhất là `TênFile_Voice.mp3`.
+1. Chọn hoặc kéo thả SRT UTF-8/UTF-8 BOM.
+2. Chọn ngôn ngữ và giọng đọc. Tên thân thiện được ánh xạ tới đúng mã giọng cũ.
+3. Tùy chọn cảm xúc và hiệu ứng. Mặc định Thủ công / Tự nhiên / Không hiệu ứng.
+4. Nghe A (giọng gốc), B (cùng giọng gốc qua xử lý), hoặc chọn câu SRT rồi nghe C
+   (âm thanh sau căn thời gian, cắt và cân bằng âm lượng, dùng chung hàm với bản xuất).
+5. Bấm TẠO MP3. Tên đề xuất: TênSRT_Voice.mp3.
 
-Bộ cài chứa runtime, Qt, model Kokoro, toàn bộ voice, từ điển và FFmpeg/FFprobe.
-Không tải Python hoặc model khi cài/chạy. Không tài khoản, không API key, không CUDA.
-Windows 10/11 x64 là mục tiêu. Bản đầu dùng CPU, giới hạn tối đa 6 luồng ONNX.
+Giao diện tiếng Việt, hai cột màu navy. Cấu hình ở trái, nghe thử và chọn câu ở phải.
+Vùng nội dung có thể cuộn trên màn hình nhỏ; nút tạo, hủy và khu vực kết quả luôn hiện.
 
-## Timeline và giới hạn thực tế
+## Căn câu ngắn và dài
 
-- START khóa theo SRT, tính bằng mẫu tại 48 kHz; không dịch caption sau.
-- END an toàn = min(END SRT, START câu kế − minimum gap).
-- Gap: 0/0,05/0,10/0,15/0,20 giây; mặc định 0,10.
-- TTS đọc ở tốc độ gốc, đo audio, rồi dùng FFmpeg `atempo` giữ cao độ.
-- Adaptive ưu tiên tối đa 1,15x; dùng đến 1,20x khi cần. Không vượt 1,20x tổng.
-- Safe Trim có thể **cắt mất từ cuối câu**; giao diện và log báo số câu đã cắt.
-- Stop and Report dừng trước export nếu audio vẫn vượt slot.
-- Nếu START trùng, đảo thứ tự, hoặc gap làm slot ≤ 0: báo caption lỗi, không xóa câu hay dịch timeline.
-- Khoảng im lặng đầu và giữa các câu được giữ. Nếu voice ngắn hơn slot, phần còn lại là im lặng;
-  Minimum Gap là khoảng nghỉ tối thiểu, không phải cam kết mọi khoảng nghỉ đúng 0,10 giây.
-- Master PCM kết thúc tại END lớn nhất trong SRT. Chỉ encode MP3 192 kbps/48 kHz/mono một lần.
-- Validator kiểm tra ranh giới vùng PCM, không phải độ chính xác âm học từng từ.
-- MP3 có encoder delay/padding và hiệu ứng nén vài mili giây; metadata gapless được ghi.
-  Không cam kết mọi phần mềm hiển thị thời lượng MP3 tuyệt đối bằng thời lượng PCM.
-- Normalize dùng active-RMS và giới hạn peak từng caption, không phải chứng nhận LUFS broadcast.
+Khi bật **Tự căn câu ngắn / dài**, app đo audio sau cảm xúc và hiệu ứng:
 
-## Voice thật
+- Câu ngắn: giảm tốc nhẹ để nhắm khoảng lặng cuối khung 0,20 giây.
+- Tốc độ tổng (người dùng × cảm xúc × căn thời gian) không dưới 0,88× và không quá 1,20×.
+- Câu dài: ưu tiên tăng tới 1,15×, tối đa 1,20×; nếu vẫn quá dài thì cắt an toàn
+  và làm nhỏ dần 5 ms cuối, hoặc dừng/báo lỗi theo lựa chọn.
+- Không dịch START của bất kỳ câu nào. Không kéo câu sau lên trước.
+- Nếu còn dư hơn 0,40 giây, app báo **LỜI THOẠI NGẮN / CHƯA LẤP ĐẦY KHUNG**.
+  Đây là cảnh báo độ phủ lời thoại, không phải lỗi chồng tiếng.
+- Ví dụ 2,80 giây / 0,88 = khoảng 3,18 giây: trong khung 4 giây vẫn còn khoảng
+  0,82 giây im lặng. App chấp nhận khoảng dư này để giữ giới hạn tốc độ.
 
-English nữ: af_heart, af_alloy, af_aoede, af_bella, af_jessica, af_kore,
-af_nicole, af_nova, af_river, af_sarah, af_sky.
+“Im lặng cuối khung” là khoảng từ cuối audio đã căn đến mốc kết thúc cho phép,
+không bao gồm gap SRT tiếp theo. Mục tiêu 0,20 giây không được bảo đảm cho script quá ngắn.
+Báo cáo có trung bình/lớn nhất, câu chưa lấp đầy, câu ở giới hạn 0,88×, tăng/giảm tốc,
+cắt và chồng tiếng. Tăng/giảm tốc được đếm so với tốc độ người dùng cộng preset trước căn.
+Tắt tự căn để giữ tốc độ đã chọn; cảnh báo thiếu lời thoại vẫn hiển thị.
 
-English nam: am_adam, am_echo, am_eric, am_fenrir, am_liam, am_michael,
-am_onyx, am_puck, am_santa.
+## Cảm xúc và hiệu ứng
 
-Japanese nữ: jf_alpha, jf_gongitsune, jf_nezumi, jf_tebukuro.
-Japanese nam: jm_kumo.
+12 preset cảm xúc với 3 mức độ; 16 lựa chọn hiệu ứng (tính cả Không hiệu ứng) với 3 mức độ.
+Kokoro không có tham số emotion native. Đây là xử lý pitch/EQ/dynamics/tempo local.
+“Mô phỏng thì thầm” không phải một model thì thầm thật.
+Tự động chọn cảm xúc dùng quy tắc từ khóa/dấu câu riêng cho Anh và Nhật, không sửa SRT.
+Chế độ Tự động bỏ qua lựa chọn cảm xúc thủ công và tự chọn cho từng câu.
 
-Giữ tên model thật, không gán nhãn giả như “comedy voice”. Kokoro không cung cấp điều khiển
-diễn xuất comedy/reviewer riêng; hãy dùng Preview để chọn chất giọng hợp với lời thoại.
-Tiếng Nhật dùng Misaki/Cutlet + fugashi + UniDic Lite để tạo âm vị Nhật, không dùng phonemizer Anh.
-Tiếng Anh dùng phonemizer eSpeak-ng do kokoro-onnx hỗ trợ. Chất lượng giọng cần nghe nghiệm thu thực tế.
+Echo/vang phòng/vang hang động chạy **trước** khi đo và căn khung.
+Đuôi vang không được phép vượt mốc. Tự nhiên + Không hiệu ứng không áp thêm màu giọng;
+việc căn câu ngắn vẫn hoạt động khi bật tự căn.
 
-## Cấu trúc kỹ thuật
+A được lưu trong RAM theo ngôn ngữ/giọng/nội dung. Đổi style chỉ tính lại B/C.
+Nghe thử dùng QMediaPlayer với bộ đệm WAV trong RAM, không tạo file nghe thử.
+Thay giọng/nội dung, tạo xong hoặc đóng app sẽ giải phóng bộ đệm.
+Không xuất WAV, MP3 từng câu, A/B/C riêng hay báo cáo cạnh MP3.
 
-`studio/timeline.py`: parser, slot và validator độc lập.
-`studio/backend.py`: model singleton dùng lại giữa các caption/tác vụ, voice và G2P.
-`studio/render.py`: disk-backed master PCM, adaptive fit, staging MP3 và publish nguyên tử.
-`studio/audio.py`: subprocess dạng argument list, cancel FFmpeg, resample, atempo, normalize.
-`studio/ui.py`: PySide6 + worker thread, preview, progress, cancel, báo lỗi.
-`studio/diagnostics.py`: sinh audio thật để kiểm tra English/Japanese và encoder.
+## Cài đặt và kiểm thử
 
-Dữ liệu làm việc: `%LOCALAPPDATA%\SRTVoiceStudio\Temp`.
-Log: `%LOCALAPPDATA%\SRTVoiceStudio\logs\latest.log`.
-Model nằm trong thư mục runtime của app, đọc offline; không cần cache tải về lần đầu.
-Chỉ cho mở một instance để tránh dọn temp của tác vụ đang chạy.
-Cancel đợi lượt inference đang chạy kết thúc; FFmpeg có thể được dừng ngay.
-Khi đóng cửa sổ trong lúc render, app yêu cầu chờ hủy xong rồi đóng lại.
+SRTVoiceStudio_Setup_1.1.0.exe giữ AppId `{68F0C1C1-17CB-4CED-8261-5C18EB92571A}`,
+nâng cấp vào đúng thư mục bản 1.0.0. Có shortcut và trình gỡ cài.
+Xem AUDIT_1.0.md, CHANGELOG.md, TEST_REPORT.md và acceptance.json của đúng build.
 
-## Build Windows tự động (dành cho người phát triển)
+Workflow chính ở `.github/workflows/srt-voice-studio-windows.yml` trong root repository.
+Windows runner dùng Python 3.12.10, dependency lock cũ, model và FFmpeg đi kèm.
+Chỉ công bố installer khi unit/DSP, frozen EXE, nâng cấp/cài mới, A/B/C, 74 câu Anh + Nhật,
+EN7 30 câu với Underfill, Unicode và gỡ cài đều đạt.
 
-Workflow: `.github/workflows/windows-build.yml`, runner `windows-latest`, Python 3.12.10 x64.
+Bài so sánh EN7 dùng cùng 30 audio Kokoro gốc cho renderer 1.0 được lưu nguyên trạng
+và renderer mới. `acceptance_baseline_1_0.py` chỉ phục vụ benchmark này; giao diện,
+Preview C và xuất bản mới đều dùng `fitting.py` duy nhất.
 
-1. Cài wheel từ `requirements-windows.lock` với hash SHA-256 và version cố định.
-2. Cài UniDic Lite 1.0.8: package dữ liệu thuần, wheel được tạo ở máy build, không cần C/C++.
-3. `prepare_assets.py` tải model và FFmpeg release cố định vào project, có retry/resume.
-4. Chạy pytest (synth giả nhưng ghép PCM/mã hóa/giải mã FFmpeg thật).
-5. PyInstaller one-folder: đóng gói runtime riêng, không lệ thuộc Python hệ thống.
-6. Inno Setup: một file `SRTVoiceStudio_Setup.exe`, cài theo user, có uninstaller.
-7. Cài ở đường dẫn Unicode; chạy executable với PATH bỏ Python và chặn mạng bằng firewall.
-8. Self-test English/Japanese thật, preview qua cùng đường synth, thời lượng, silence, GUI smoke;
-   sau đó uninstall và kiểm tra executable đã bị gỡ.
-9. Chỉ upload installer khi mọi gate đạt; luôn lưu log build để sửa lỗi nếu có.
-
-Repo phải có Actions được bật và công cụ kết nối phải có quyền ghi workflow.
-Workflow đã được chạy trên GitHub Actions. Xem kết quả của từng lần chạy, không suy luận trạng thái chỉ từ mã nguồn.
-Runner là Windows Server của GitHub; gate này không thay thế thử nghiệm trên Windows 10/11 máy sạch.
-Test GUI tự động không kiểm tra âm thanh qua loa hay chất lượng giọng bằng tai.
-
-## Kiểm thử đã chạy tại Work
-
-Xem `TEST_REPORT.md`. Không đánh đồng test timeline dùng synth giả với test mô hình TTS thật.
-
-## Nguồn kỹ thuật
-
-- https://github.com/thewh1teagle/kokoro-onnx
-- https://github.com/hexgrad/misaki
-- https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md
-- https://pypi.org/project/fugashi/1.4.0/
-- https://pypi.org/project/PySide6/6.8.3/
-- https://github.com/GyanD/codexffmpeg/releases/tag/7.1.1
-- https://pyinstaller.org/en/stable/operating-mode.html
-
-Không đưa API key, token hoặc thông tin riêng vào repo.
-
-## Emotion và FX 1.1.0
-
-Kokoro không có tham số emotion native. Các Performance preset là DSP pitch, EQ, dynamics và tempo; Whisper-like chỉ mô phỏng timbre. Auto Emotion dùng từ khóa/dấu câu, có thể chọn sai ngữ cảnh; Manual cho phép kiểm soát trực tiếp.
-
-FX được áp trước khi đo độ dài và căn slot, gồm cả đuôi Echo/Reverb/Cave. Tổng effective speed (emotion, user speed, fit) không vượt 1.20x. Khi slot quá ngắn, Safe Trim ưu tiên timeline và fade cuối 5 ms; Stop and Report dừng và giữ nguyên MP3 cũ.
-
-A/B/C chỉ phát audio tạm, không xuất thêm file. Một file MP3 mono 48 kHz / 192 kbps được encode một lần từ master PCM. Không có API, cloud, GPU bắt buộc hay phụ thuộc cài ngoài.
-
-Giao diện có vùng cuộn cấu hình; Generate, Cancel và báo cáo luôn nằm phía dưới. Xem `CHANGELOG.md`, `AUDIT_1.0.md` và kết quả acceptance của đúng build trước khi phát hành.
+Kết quả Windows runner không thay thế kiểm tra bằng tai và nghiệm thu trên máy
+Windows 10/11 cụ thể của người dùng. Hiệu quả cảm xúc là DSP, có giới hạn tự nhiên.

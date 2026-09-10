@@ -6,9 +6,7 @@ import tempfile
 import numpy as np
 from .timeline import read_srt, slots_for, validate, RATE, display_time, TimelineError
 from .paths import workspace
-from .audio import encode, check_cancel
-from .effects import EffectProcessor
-from .fitting import fit_processed
+from .audio import convert, normalize, encode, check_cancel
 
 @dataclass(frozen=True)
 class Settings:
@@ -19,11 +17,6 @@ class Settings:
     adaptive: bool = True
     loudness: bool = True
     overflow: str = 'Safe Trim'
-    emotion_mode: str = 'Manual'
-    emotion: str = 'Natural'
-    intensity: str = 'Medium'
-    effect: str = 'None'
-    strength: str = 'Medium'
 
 def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
     if not 1.0 <= settings.speed <= 1.2:
@@ -44,7 +37,6 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
     # Master is disk-backed; even long input cannot allocate hours of PCM in RAM.
     with tempfile.TemporaryDirectory(prefix='job-', dir=workspace()) as temp:
         temp = Path(temp)
-        processor = EffectProcessor(temp, cancel)
         master_path = temp / 'master.raw'
         total_samples = end_ms * 48
         with master_path.open('wb') as f:
@@ -60,16 +52,31 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                 samples = np.asarray(samples, dtype=np.float32).reshape(-1)
                 if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
                     raise RuntimeError(f'CAPTION {c.index}: TTS trả về audio rỗng hoặc không hợp lệ.')
-                base_duration = len(samples)/rate
-                processed, emotion_tempo, emotion, intensity = processor.process(samples, rate, settings, c.text)
-                fitted, record = fit_processed(processed, rate, slot, settings, emotion_tempo, temp, cancel)
-                record.update(tts_seconds=base_duration, emotion=emotion, intensity=intensity,
-                              effect=settings.effect, strength=settings.strength)
+                available = slot.end - slot.start
+                duration = len(samples) / rate
+                needed = duration / (available / RATE)
+                # Prefer <=1.15; use up to 1.20 only when the slot needs it.
+                speed = max(settings.speed, min(needed, 1.15)) if settings.adaptive else settings.speed
+                if settings.adaptive and needed > 1.15:
+                    speed = max(speed, min(needed, 1.20))
+                fitted = convert(samples, rate, speed, temp, cancel)
+                excess = max(0, len(fitted) - available)
+                if excess and settings.overflow == 'Stop and Report':
+                    raise TimelineError(f'CAPTION {c.index} TOO LONG\nSlot: {available/RATE:.3f} s\n'
+                        f'TTS: {duration:.3f} s\nSpeed: {speed:.3f}x\n'
+                        f'Adjusted: {len(fitted)/RATE:.3f} s\nKhông export.')
+                fitted = fitted[:available].copy()
+                # Fade only inside the slot; no crossfade across subtitle boundaries.
+                if excess:
+                    fade = min(len(fitted), 240)
+                    fitted[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
+                if settings.loudness:
+                    fitted = normalize(fitted)
+                fitted = np.clip(fitted, -0.89, 0.89)
                 master[slot.start:slot.start+len(fitted)] = fitted
                 lengths.append(len(fitted))
-                progress(i+1, len(slots), f"Caption {c.index} • {emotion} • {settings.effect} / {settings.strength} • "
-                    f"Processed {record['processed_seconds']:.2f}s / Slot {record['available_seconds']:.2f}s • "
-                    f"Fit {record['speed']:.3f}x • Silence {record['trailing_silence']:.2f}s • Overlap 0")
+                record = dict(caption=c.index, start_sample=slot.start, end_sample=slot.start+len(fitted),
+                              allowed_end=slot.end, tts_seconds=duration, speed=speed, trimmed=bool(excess))
                 records.append(record)
                 logging.info('Caption result: %s', record)
             summary = validate(slots, lengths, settings.gap_ms)
@@ -77,15 +84,7 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         finally:
             del master
         check_cancel(cancel)
-        summary.update(emotion_mode=settings.emotion_mode, emotion=settings.emotion,
-                       effect=settings.effect, strength=settings.strength,
-                       speed_adjusted=sum(r['speed_up'] or r['slow_down'] for r in records),
-                       speed_up_captions=sum(r['speed_up'] for r in records),
-                       slow_down_captions=sum(r['slow_down'] for r in records),
-                       underfilled_captions=sum(r['underfilled'] for r in records),
-                       underfilled_after_hard_minimum=sum(r['underfilled_at_hard_minimum'] for r in records),
-                       average_trailing_silence=sum(r['trailing_silence'] for r in records)/len(records),
-                       maximum_trailing_silence=max(r['trailing_silence'] for r in records),
+        summary.update(speed_adjusted=sum(r['speed'] > settings.speed+1e-6 for r in records),
                        safely_trimmed=sum(r['trimmed'] for r in records),
                        duration=display_time(end_ms), duration_ms=end_ms, records=records)
         progress(len(slots), len(slots), 'TIMELINE VALID • Đang mã hóa MP3')

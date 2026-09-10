@@ -73,3 +73,15 @@ def encode(master, destination, cancel):
     run([executable('ffmpeg'), '-nostdin', '-v', 'error', '-y', '-f', 'f32le',
          '-ar', str(RATE), '-ac', '1', '-i', str(master), '-c:a', 'libmp3lame',
          '-b:a', '192k', '-write_xing', '1', str(destination)], cancel)
+
+
+def wav_bytes(samples, rate=RATE):
+    """Seekable in-memory preview WAV; no Windows media file locks or leftovers."""
+    import io
+    stream = io.BytesIO()
+    with wave.open(stream, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((np.clip(samples, -1, 1)*32767).astype('<i2').tobytes())
+    return stream.getvalue()

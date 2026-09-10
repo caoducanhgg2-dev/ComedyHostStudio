@@ -71,7 +71,9 @@ for scenario in ('upgrade','clean'):
         if scenario=='upgrade':
             subprocess.run([str(exe),'--stress-test'],env=env,check=True,timeout=2400)
             data['real_74_caption_stress']=read_report('stress-test.json')
-        assert not list((appdata/'Temp').glob('job-*')),'Temporary audio remains'
+            subprocess.run([str(exe),'--underfill-test'],env=env,check=True,timeout=900)
+            data['real_30_caption_underfill']=read_report('underfill-test.json')
+        assert not list((appdata/'Temp').glob('job-*')),'Temporary audio remains: '+repr([str(p) for p in (appdata/'Temp').glob('job-*')])
         data['registry']=state
         results['scenarios'][scenario]=data
     finally:

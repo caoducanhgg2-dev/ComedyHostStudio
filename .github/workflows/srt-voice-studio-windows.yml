@@ -49,7 +49,7 @@ jobs:
           run-id: 34382171196
           github-token: ${{ github.token }}
           path: SRTVoiceStudio/baseline-installer
-      - name: Test upgrade, clean install, offline A-B-C, real 74 captions, uninstall
+      - name: Test upgrade, clean install, offline A-B-C, real 74 and 30 captions, uninstall
         run: python build_tools/smoke_installer.py
       - name: Installer checksum
         run: |
@@ -75,6 +75,7 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-test.json" ci-logs/ui-test.json -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-preview.png" ci-logs/ui-preview.png -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/stress-test.json" ci-logs/stress-test.json -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/underfill-test.json" ci-logs/underfill-test.json -ErrorAction SilentlyContinue
           exit 0
       - name: Build diagnostics
         if: always()

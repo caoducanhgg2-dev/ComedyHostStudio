@@ -3,20 +3,21 @@ import tempfile
 import threading
 import traceback
 from pathlib import Path
-from PySide6.QtCore import QThread, Signal, QUrl, Qt
+from PySide6.QtCore import QThread, Signal, QUrl, Qt, QBuffer, QIODevice, QByteArray
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QDoubleSpinBox, QCheckBox, QProgressBar,
-    QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox)
+    QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox, QGridLayout, QPlainTextEdit)
 from .backend import Backend, EN_VOICES, JA_VOICES, PREVIEW
 from .render import render, Settings
 from .paths import workspace
-from .audio import Cancelled, write_wav
+from .audio import Cancelled, wav_bytes
 from .effects import EMOTIONS, EFFECTS, LEVELS
 from .preview import PreviewCache
 from .timeline import read_srt, slots_for, RATE
 from . import __version__
+from . import ui_text as vi
 
 class Worker(QThread):
     progress = Signal(int, int, str)
@@ -49,184 +50,213 @@ class Worker(QThread):
             logging.exception('Task failed')
             self.error.emit(str(exc), traceback.format_exc())
 
+class PreviewText(QPlainTextEdit):
+    textEdited = Signal()
+    def __init__(self):
+        super().__init__()
+        self.textChanged.connect(self.textEdited.emit)
+    def text(self):
+        return self.toPlainText()
+    def setText(self, text):
+        old = self.blockSignals(True)
+        self.setPlainText(text)
+        self.blockSignals(old)
+
 class Window(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('SRT Voice Studio ' + __version__)
-        self.setMinimumSize(720, 720)
-        self.resize(840, 900)
+        self.setMinimumSize(980, 730)
+        self.resize(1340, 940)
         self.setAcceptDrops(True)
         self.backend = Backend()
         self.worker = None
         self.output = None
-        self.preview_temp = None
+        self.preview_temp = None  # Compatibility: previews now use memory only.
+        self.preview_device = None
         self.preview_cache = PreviewCache()
         self.captions = []
+        self.loaded_fingerprint = None
         self.player = QMediaPlayer(self)
         self.audio_output = QAudioOutput(self)
         self.player.setAudioOutput(self.audio_output)
         self.player.mediaStatusChanged.connect(self.playback_status)
-        self.player.errorOccurred.connect(lambda *_: self.status.setText('Không phát được preview: ' + self.player.errorString()))
-        self.setStyleSheet('''
-            QMainWindow, QWidget { background: #101826; color: #e8eef8; font-size: 14px; }
-            QLineEdit, QComboBox, QDoubleSpinBox, QTextEdit { background: #1e2a3d;
-                border: 1px solid #3a4b66; border-radius: 6px; padding: 8px; }
-            QPushButton { background: #263b55; border: 1px solid #46617c; padding: 10px; border-radius: 6px; }
-            QPushButton:hover { background: #325271; } QPushButton:disabled { color: #738094; }
-            QPushButton#generate { background: #246adb; font-size: 18px; font-weight: bold; padding: 16px; }
-            QProgressBar { border: 1px solid #3a4b66; border-radius: 4px; text-align: center; }
-            QProgressBar::chunk { background: #30b6a5; }
-        ''')
-        central = QWidget()
-        self.setCentralWidget(central)
-        outer = QVBoxLayout(central)
-        outer.setContentsMargins(18, 12, 18, 12)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content = QWidget()
-        scroll.setWidget(content)
-        outer.addWidget(scroll, 1)
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(10, 8, 10, 8)
-        title = QLabel('SRT Voice Studio ' + __version__)
-        title.setStyleSheet('font-size: 29px; font-weight: bold;')
-        layout.addWidget(title)
-        layout.addWidget(QLabel('Offline voices • English US / Japanese • One MP3'))
-        self.file = QLineEdit()
-        self.file.setPlaceholderText('Kéo file .srt vào đây hoặc bấm Browse')
-        browse = QPushButton('Browse')
-        browse.clicked.connect(self.browse)
-        row = QHBoxLayout()
-        row.addWidget(self.file)
-        row.addWidget(browse)
-        layout.addLayout(row)
-        form = QFormLayout()
-        self.language = QComboBox()
-        self.language.addItems(['English US', 'Japanese'])
-        self.voice = QComboBox()
-        self.preview_text = QLineEdit()
-        self.language.currentTextChanged.connect(self.language_changed)
-        form.addRow('Language', self.language)
-        form.addRow('Voice', self.voice)
-        layout.addLayout(form)
-        style = QGroupBox('VOICE STYLE')
-        style_form = QFormLayout(style)
-        def combo(items, default=None):
-            box = QComboBox()
-            box.addItems(list(items))
-            if default:
-                box.setCurrentText(default)
+        self.player.errorOccurred.connect(lambda *_: self.status.setText('Không phát được nghe thử: ' + self.player.errorString()))
+        self.setStyleSheet("""
+            QWidget { background: #091421; color: #e6eef9; font-family: 'Segoe UI'; font-size: 13px; }
+            QGroupBox { background: #0d1b2a; border: 1px solid #22364c; border-radius: 9px;
+                        margin-top: 12px; padding: 15px 12px 10px; font-weight: 600; }
+            QGroupBox::title { subcontrol-origin: margin; left: 13px; padding: 0 5px; color: #e6f2ff; }
+            QLabel { background: transparent; }
+            QLineEdit, QPlainTextEdit, QComboBox, QDoubleSpinBox, QTextEdit {
+                background: #17283b; border: 1px solid #35506b; border-radius: 6px;
+                padding: 7px; color: #f0f5ff; selection-background-color: #1975df; }
+            QComboBox { min-height: 22px; padding-right: 20px; }
+            QComboBox QAbstractItemView { background: #17283b; selection-background-color: #2465a8; }
+            QComboBox:disabled, QPushButton:disabled { color: #73859a; border-color: #273b50; }
+            QPushButton { background: #20354b; border: 1px solid #375570; border-radius: 6px; padding: 9px; }
+            QPushButton:hover { background: #2d4c6c; border-color: #4b84b9; }
+            QPushButton#generate { background: #1172eb; border: 1px solid #338fff; font-size: 22px; font-weight: 700; }
+            QPushButton#previewA { background: #125bbe; } QPushButton#previewB { border-color: #8060ca; }
+            QPushButton#previewC { border-color: #21aa94; }
+            QProgressBar { background: #17283b; border: none; border-radius: 5px; height: 14px; text-align: center; }
+            QProgressBar::chunk { background: #11bfa8; border-radius: 5px; }
+            QCheckBox { spacing: 7px; background: transparent; padding: 2px; }
+            QScrollArea { border: none; } QScrollBar:vertical { width: 10px; background: #091421; }
+            QScrollBar::handle:vertical { background: #34516f; border-radius: 4px; min-height: 30px; }
+        """)
+        central = QWidget(); self.setCentralWidget(central)
+        outer = QVBoxLayout(central); outer.setContentsMargins(18, 10, 18, 12); outer.setSpacing(10)
+        header = QHBoxLayout()
+        title = QLabel('SRT Voice Studio <span style="color:#309fff">1.1.0</span>')
+        title.setStyleSheet('font-size: 27px; font-weight: 700;')
+        header.addWidget(title); header.addStretch()
+        badge = QLabel('●  Ngoại tuyến · Không API')
+        badge.setStyleSheet('color:#46dec2; background:#123b39; border-radius:14px; padding:7px 13px;')
+        header.addWidget(badge); outer.addLayout(header)
+        subtitle = QLabel('Tiếng Anh (Mỹ) / Tiếng Nhật · Chỉ xuất một MP3 · Giữ nguyên mốc SRT')
+        subtitle.setStyleSheet('color:#9db1c9;'); outer.addWidget(subtitle)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        body = QWidget(); scroll.setWidget(body); outer.addWidget(scroll, 1)
+        columns = QHBoxLayout(body); columns.setContentsMargins(0,0,0,0); columns.setSpacing(12)
+        left_widget, right_widget = QWidget(), QWidget()
+        left, right = QVBoxLayout(left_widget), QVBoxLayout(right_widget)
+        for layout in (left,right): layout.setContentsMargins(0,0,0,0); layout.setSpacing(10)
+        columns.addWidget(left_widget, 55); columns.addWidget(right_widget, 45)
+        def group(title, parent):
+            card = QGroupBox(title); box = QVBoxLayout(card); box.setSpacing(8); parent.addWidget(card)
             return box
-        self.emotion_mode = combo(['Manual', 'Auto'])
-        self.emotion = combo(EMOTIONS)
-        self.intensity = combo(LEVELS, 'Medium')
-        self.effect = combo(EFFECTS)
-        self.strength = combo(LEVELS, 'Medium')
-        for label, control in [('Emotion Mode',self.emotion_mode),('Emotion / Performance',self.emotion),
-                ('Emotion Intensity',self.intensity),('Voice Effect',self.effect),('Effect Strength',self.strength)]:
-            style_form.addRow(label,control)
-        note = QLabel('Performance presets dùng DSP local. Whisper-like là mô phỏng bằng DSP.')
-        note.setWordWrap(True)
-        style_form.addRow(note)
-        layout.addWidget(style)
-        preview_group = QGroupBox('VOICE PREVIEW')
-        preview_form = QFormLayout(preview_group)
-        self.caption_select = QComboBox()
-        self.caption_select.addItem('Custom text • chưa chọn caption', None)
-        preview_form.addRow('Preview Caption', self.caption_select)
-        preview_form.addRow('Preview Text', self.preview_text)
-        self.preview_text.setMaxLength(4000)
-        self.preview_buttons = []
-        preview_row = QHBoxLayout()
-        for stage, label in [('A','▶ A Original'),('B','▶ B Processed'),('C','▶ C Final Timeline')]:
-            button = QPushButton(label)
-            button.clicked.connect(lambda checked=False, stage=stage: self.preview_voice(stage))
-            self.preview_buttons.append(button)
-            preview_row.addWidget(button)
-        preview_form.addRow(preview_row)
-        self.preview_details = QLabel('A: —    B: —    C: —')
-        self.preview_details.setWordWrap(True)
-        self.preview_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        preview_form.addRow(self.preview_details)
-        layout.addWidget(preview_group)
-        timeline_group = QGroupBox('STRICT SRT TIMELINE')
-        form = QFormLayout(timeline_group)
-        self.speed = QDoubleSpinBox()
-        self.speed.setRange(1.0, 1.2)
-        self.speed.setSingleStep(0.01)
-        self.speed.setSuffix('x')
-        self.speed.setValue(1.0)
-        form.addRow('Speed', self.speed)
+        def combo(mapping, default=None):
+            control = QComboBox()
+            for value,label in mapping.items(): control.addItem(label,value)
+            if default is not None: control.setCurrentIndex(control.findData(default))
+            return control
+        def field(layout, label, control):
+            box = QVBoxLayout(); box.setSpacing(4); box.addWidget(QLabel(label)); box.addWidget(control)
+            layout.addLayout(box)
+        file_box = group('①  Tệp phụ đề SRT', left)
+        file_row = QHBoxLayout()
+        self.file = QLineEdit(); self.file.setPlaceholderText('Kéo thả tệp .srt hoặc chọn tệp…')
+        browse = QPushButton('Chọn tệp'); browse.clicked.connect(self.browse)
+        file_row.addWidget(self.file,1); file_row.addWidget(browse); file_box.addLayout(file_row)
+        self.file_info = QLabel('Chưa chọn tệp · Hỗ trợ UTF-8 và tên tệp có dấu')
+        self.file_info.setStyleSheet('color:#9db1c9;'); file_box.addWidget(self.file_info)
+        voices_row = QHBoxLayout(); left.addLayout(voices_row)
+        language_card = QGroupBox('②  Ngôn ngữ'); language_box = QVBoxLayout(language_card)
+        self.language = combo(vi.LANGUAGES); language_box.addWidget(self.language)
+        self.voice_count = QLabel(); self.voice_count.setStyleSheet('color:#9db1c9;'); language_box.addWidget(self.voice_count)
+        voices_row.addWidget(language_card,2)
+        voice_card = QGroupBox('③  Giọng đọc'); voice_box = QVBoxLayout(voice_card)
+        self.voice = QComboBox(); voice_box.addWidget(self.voice)
+        self.voice_info = QLabel(); self.voice_info.setStyleSheet('color:#9db1c9;'); voice_box.addWidget(self.voice_info)
+        voices_row.addWidget(voice_card,3)
+        style_box = group('④  Phong cách giọng · tùy chọn', left)
+        style_top, style_bottom = QHBoxLayout(), QHBoxLayout()
+        self.emotion_mode = combo(vi.MODES)
+        self.emotion = combo(vi.EMOTIONS)
+        self.intensity = combo(vi.INTENSITIES,'Medium')
+        self.effect = combo(vi.EFFECTS)
+        self.strength = combo(vi.INTENSITIES,'Medium')
+        for label,control in [('Chế độ',self.emotion_mode),('Cảm xúc',self.emotion),('Mức độ',self.intensity)]:
+            field(style_top,label,control)
+        for label,control in [('Hiệu ứng giọng',self.effect),('Độ mạnh',self.strength)]:
+            field(style_bottom,label,control)
+        style_box.addLayout(style_top); style_box.addLayout(style_bottom)
+        note=QLabel('Chọn Tự nhiên + Không hiệu ứng để giữ giọng sạch. Cảm xúc và thì thầm được mô phỏng bằng xử lý âm thanh.')
+        note.setWordWrap(True); note.setStyleSheet('color:#9db1c9; font-size:12px;'); style_box.addWidget(note)
+        timeline_box = group('⑤  Mốc thời gian và căn giọng', left)
+        timing_row = QHBoxLayout()
+        self.speed = QDoubleSpinBox(); self.speed.setRange(1,1.2); self.speed.setSingleStep(.01); self.speed.setValue(1); self.speed.setSuffix('×')
         self.gap = QComboBox()
-        for ms in (0, 50, 100, 150, 200):
-            self.gap.addItem(f'{ms/1000:.2f} sec', ms)
+        for ms in (0,50,100,150,200): self.gap.addItem(f'{ms/1000:.2f} giây',ms)
         self.gap.setCurrentIndex(2)
-        form.addRow('Minimum Gap', self.gap)
-        self.overflow = QComboBox()
-        self.overflow.addItems(['Safe Trim', 'Stop and Report'])
-        self.overflow.setToolTip('Safe Trim có thể cắt mất từ cuối câu quá dài. Stop and Report dừng để bạn sửa SRT.')
-        form.addRow('Overflow', self.overflow)
-        form.addRow('Compute', QLabel('CPU • Không cần CUDA'))
-        form.addRow('Timeline mode', QLabel('STRICT SRT TIMELINE'))
-        layout.addWidget(timeline_group)
-        for text in ('Lock SRT Start Times', 'Never Overlap Voices', 'Delete Temporary Audio'):
-            checkbox = QCheckBox(text)
-            checkbox.setChecked(True)
-            checkbox.setEnabled(False)
-            layout.addWidget(checkbox)
-        self.adaptive = QCheckBox('Adaptive Speed (1.00–1.15x; tối đa 1.20x)')
-        self.adaptive.setChecked(True)
-        self.normalize = QCheckBox('Normalize Loudness')
-        self.normalize.setChecked(True)
-        layout.addWidget(self.adaptive)
-        layout.addWidget(self.normalize)
-        layout.addStretch()
-        layout = outer
-        self.generate = QPushButton('GENERATE MP3')
-        self.generate.setObjectName('generate')
+        self.overflow = combo(vi.OVERFLOWS)
+        self.overflow.setToolTip('Cắt an toàn có thể cắt từ cuối câu quá dài. Dừng và báo lỗi giữ nguyên MP3 cũ để bạn sửa SRT.')
+        for label,control in [('Tốc độ gốc',self.speed),('Khoảng cách tối thiểu',self.gap),('Câu quá dài',self.overflow)]:
+            field(timing_row,label,control)
+        timeline_box.addLayout(timing_row)
+        self.adaptive = QCheckBox('Tự căn câu ngắn / dài (0.88–1.20×)'); self.adaptive.setChecked(True)
+        self.adaptive.setToolTip('Mục tiêu im lặng cuối khung 0.20 giây. Không chậm dưới 0.88×; câu quá ngắn vẫn có thể còn khoảng lặng.')
+        self.normalize = QCheckBox('Cân bằng âm lượng'); self.normalize.setChecked(True)
+        timeline_box.addWidget(self.adaptive); timeline_box.addWidget(self.normalize)
+        for text in ('Khóa mốc bắt đầu theo SRT','Không chồng tiếng','Tự dọn âm thanh tạm'):
+            check=QCheckBox(text); check.setChecked(True); check.setEnabled(False); timeline_box.addWidget(check)
+        left.addStretch()
+        preview_box = group('⑥  Nghe thử giọng A / B / C', right)
+        preview_box.addWidget(QLabel('Nội dung nghe thử'))
+        self.preview_text = PreviewText(); self.preview_text.setMinimumHeight(85); self.preview_text.setMaximumHeight(110)
+        preview_box.addWidget(self.preview_text)
+        buttons=QHBoxLayout(); self.preview_buttons=[]
+        for stage,label in [('A','▶  A · Giọng gốc'),('B','▶  B · Đã xử lý'),('C','▶  C · Theo SRT')]:
+            button=QPushButton(label); button.setObjectName('preview'+stage); button.setMinimumHeight(48)
+            button.clicked.connect(lambda checked=False,stage=stage:self.preview_voice(stage))
+            self.preview_buttons.append(button); buttons.addWidget(button)
+        preview_box.addLayout(buttons)
+        durations=QHBoxLayout(); self.duration_cards=[]
+        for label,color in [('A · Giọng gốc','#35b5ff'),('B · Đã xử lý','#b493ff'),('C · Theo mốc SRT','#25d1a6')]:
+            value=QLabel(label+'\n—'); value.setStyleSheet(f'border-left:3px solid {color}; padding:8px; font-size:16px;')
+            durations.addWidget(value); self.duration_cards.append(value)
+        preview_box.addLayout(durations)
+        self.preview_details=QLabel('Chọn A để nghe giọng gốc. B dùng cùng giọng gốc sau xử lý.')
+        self.preview_details.setWordWrap(True); self.preview_details.setMinimumHeight(95)
+        self.preview_details.setStyleSheet('background:#122337; border:1px solid #28425c; border-radius:7px; padding:10px;')
+        self.preview_details.setTextInteractionFlags(Qt.TextSelectableByMouse); preview_box.addWidget(self.preview_details)
+        caption_box=group('⑦  Chọn câu SRT để nghe bản cuối',right)
+        caption_row=QHBoxLayout()
+        self.caption_select=QComboBox(); self.caption_select.addItem('Nội dung tự nhập · chưa chọn câu',None)
+        self.previous_caption=QPushButton('‹'); self.next_caption=QPushButton('›')
+        self.previous_caption.setFixedWidth(36); self.next_caption.setFixedWidth(36)
+        self.previous_caption.clicked.connect(lambda:self.caption_select.setCurrentIndex(max(0,self.caption_select.currentIndex()-1)))
+        self.next_caption.clicked.connect(lambda:self.caption_select.setCurrentIndex(min(self.caption_select.count()-1,self.caption_select.currentIndex()+1)))
+        caption_row.addWidget(self.caption_select,1); caption_row.addWidget(self.previous_caption); caption_row.addWidget(self.next_caption)
+        caption_box.addLayout(caption_row)
+        self.caption_body=QLabel('Chọn SRT ở cột trái, sau đó chọn câu muốn kiểm tra.')
+        self.caption_body.setTextFormat(Qt.PlainText); self.caption_body.setWordWrap(True); self.caption_body.setMinimumHeight(48)
+        caption_box.addWidget(self.caption_body)
+        self.slot_details=QLabel('Bắt đầu: —    Kết thúc cho phép: —\nThời gian khả dụng: —')
+        self.slot_details.setWordWrap(True); self.slot_details.setStyleSheet('color:#a8c6e7; padding:5px;'); caption_box.addWidget(self.slot_details)
+        right.addStretch()
+        footer=QHBoxLayout()
+        self.generate=QPushButton('▶  TẠO MP3'); self.generate.setObjectName('generate'); self.generate.setMinimumSize(285,58)
         self.generate.clicked.connect(self.generate_mp3)
-        self.cancel_button = QPushButton('Cancel')
-        self.cancel_button.setEnabled(False)
+        self.cancel_button=QPushButton('Hủy'); self.cancel_button.setMinimumHeight(58); self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.cancel_job)
-        row = QHBoxLayout()
-        row.addWidget(self.generate, 3)
-        row.addWidget(self.cancel_button, 1)
-        layout.addLayout(row)
-        self.bar = QProgressBar()
-        layout.addWidget(self.bar)
-        self.status = QLabel('Sẵn sàng • Chọn file SRT để bắt đầu')
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        self.report = QTextEdit()
-        self.report.setReadOnly(True)
-        self.report.setMaximumHeight(145)
-        layout.addWidget(self.report)
-        self.open_folder = QPushButton('Open Output Folder')
-        self.open_folder.setEnabled(False)
-        self.open_folder.clicked.connect(self.open_output)
-        layout.addWidget(self.open_folder)
-        self.diagnostic_action = self.menuBar().addMenu('Help').addAction('Run Diagnostics')
-        self.diagnostic_action.triggered.connect(lambda: self.start('diagnose', {}))
-        self.edit_controls = [browse, self.file, self.language, self.voice, self.preview_text,
-            self.speed, self.gap, self.overflow, self.adaptive, self.normalize,
-            self.emotion_mode, self.emotion, self.intensity, self.effect, self.strength, self.caption_select]
+        footer.addWidget(self.generate,3); footer.addWidget(self.cancel_button,1)
+        progress_box=QVBoxLayout()
+        self.bar=QProgressBar(); self.bar.setValue(0); progress_box.addWidget(self.bar)
+        self.status=QLabel('Sẵn sàng · Chọn tệp SRT để bắt đầu'); self.status.setWordWrap(True); progress_box.addWidget(self.status)
+        footer.addLayout(progress_box,5)
+        self.open_folder=QPushButton('Mở thư mục kết quả'); self.open_folder.setEnabled(False); self.open_folder.clicked.connect(self.open_output)
+        footer.addWidget(self.open_folder,2); outer.addLayout(footer)
+        self.report=QTextEdit(); self.report.setReadOnly(True); self.report.setFixedHeight(130)
+        self.report.setPlaceholderText('Kết quả sẽ hiển thị ở đây: số câu, căn tốc độ, khoảng lặng và kiểm tra chồng tiếng.')
+        outer.addWidget(self.report)
+        self.diagnostic_action=self.menuBar().addMenu('Trợ giúp').addAction('Kiểm tra ứng dụng')
+        self.diagnostic_action.triggered.connect(lambda:self.start('diagnose',{}))
+        self.edit_controls=[browse,self.file,self.language,self.voice,self.preview_text,self.caption_select,
+            self.previous_caption,self.next_caption,self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,
+            self.speed,self.gap,self.overflow,self.adaptive,self.normalize]
+        self.language.currentIndexChanged.connect(self.language_changed)
         self.file.editingFinished.connect(self.load_captions)
         self.caption_select.currentIndexChanged.connect(self.caption_changed)
         self.preview_text.textEdited.connect(self.custom_text_edited)
-        self.voice.currentTextChanged.connect(self.invalidate_base)
+        self.voice.currentIndexChanged.connect(self.voice_changed)
         for control in (self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,self.gap,self.overflow):
             control.currentIndexChanged.connect(self.style_changed)
-        self.speed.valueChanged.connect(self.style_changed)
-        self.adaptive.toggled.connect(self.style_changed)
-        self.normalize.toggled.connect(self.style_changed)
-        self.language_changed('English US')
-        self.refresh_controls()
+        self.speed.valueChanged.connect(self.style_changed); self.adaptive.toggled.connect(self.style_changed); self.normalize.toggled.connect(self.style_changed)
+        self.language_changed(); self.refresh_controls()
 
-    def language_changed(self, language):
+    def voice_changed(self, *_):
+        self.voice_info.setText('Mã giọng: '+str(self.voice.currentData() or '—'))
+        self.invalidate_base()
+
+    def language_changed(self, *_):
+        language=self.language.currentData()
+        choices=JA_VOICES if language=='Japanese' else EN_VOICES
         self.voice.clear()
-        self.voice.addItems(JA_VOICES if language == 'Japanese' else EN_VOICES)
-        if self.caption_select.currentData() is None:
-            self.preview_text.setText(PREVIEW[language])
+        for voice in choices:self.voice.addItem(vi.voice_label(voice),voice)
+        self.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
+        if self.caption_select.currentData() is None:self.preview_text.setText(PREVIEW[language])
         self.invalidate_base()
 
     def browse(self):
@@ -280,20 +310,25 @@ class Window(QMainWindow):
 
     def progress(self, done, total, message):
         self.bar.setValue(int(done * 100 / max(total, 1)))
-        self.status.setText(message)
+        for mapping in (vi.EMOTIONS,vi.EFFECTS,vi.INTENSITIES):
+            for source,label in mapping.items():
+                message=message.replace(' • '+source+' • ',' • '+label+' • ')
+                message=message.replace(' • '+source+' /',' • '+label+' /')
+                message=message.replace('/ '+source+' •','/ '+label+' •')
+        self.status.setText(vi.message(message))
 
     def settings(self):
-        return Settings(language=self.language.currentText(), voice=self.voice.currentText(),
+        return Settings(language=self.language.currentData(), voice=self.voice.currentData(),
             speed=self.speed.value(), gap_ms=self.gap.currentData(), adaptive=self.adaptive.isChecked(),
-            loudness=self.normalize.isChecked(), overflow=self.overflow.currentText(),
-            emotion_mode=self.emotion_mode.currentText(), emotion=self.emotion.currentText(),
-            intensity=self.intensity.currentText(), effect=self.effect.currentText(), strength=self.strength.currentText())
+            loudness=self.normalize.isChecked(), overflow=self.overflow.currentData(),
+            emotion_mode=self.emotion_mode.currentData(), emotion=self.emotion.currentData(),
+            intensity=self.intensity.currentData(), effect=self.effect.currentData(), strength=self.strength.currentData())
 
     def refresh_controls(self):
         idle = not self.busy()
-        self.emotion.setEnabled(idle and self.emotion_mode.currentText() == 'Manual')
-        self.intensity.setEnabled(idle and self.emotion_mode.currentText() == 'Manual' and self.emotion.currentText() != 'Natural')
-        self.strength.setEnabled(idle and self.effect.currentText() != 'None')
+        self.emotion.setEnabled(idle and self.emotion_mode.currentData() == 'Manual')
+        self.intensity.setEnabled(idle and self.emotion_mode.currentData() == 'Manual' and self.emotion.currentData() != 'Natural')
+        self.strength.setEnabled(idle and self.effect.currentData() != 'None')
         self.preview_buttons[2].setEnabled(idle and self.caption_select.currentData() is not None)
 
     def invalidate_base(self, *_):
@@ -301,12 +336,13 @@ class Window(QMainWindow):
             return
         self.stop_preview()
         self.preview_cache.clear()
-        self.preview_details.setText('A: —    B: —    C: —')
+        self.clear_preview_details()
 
     def style_changed(self, *_):
         self.stop_preview()
         a = self.preview_cache.base
-        self.preview_details.setText(f'A: {len(a)/self.preview_cache.rate:.3f} s    B: —    C: —' if a is not None else 'A: —    B: —    C: —')
+        self.clear_preview_details()
+        if a is not None:self.duration_cards[0].setText(f'A · Giọng gốc\n{len(a)/self.preview_cache.rate:.3f} giây')
         self.refresh_controls()
         self.show_slot()
 
@@ -320,18 +356,24 @@ class Window(QMainWindow):
     def load_captions(self):
         if self.busy():
             return
+        file=Path(self.file.text().strip())
+        fingerprint=(str(file),file.stat().st_mtime_ns) if file.is_file() else None
+        if fingerprint is not None and fingerprint==self.loaded_fingerprint:return
+        self.loaded_fingerprint=None
         self.captions = []
         self.caption_select.blockSignals(True)
         self.caption_select.clear()
-        self.caption_select.addItem('Custom text • chọn caption để nghe C', None)
+        self.caption_select.addItem('Nội dung tự nhập · chọn câu để nghe C', None)
         try:
             if self.file.text().strip():
                 self.captions = read_srt(Path(self.file.text().strip()))
                 slots_for(self.captions, self.gap.currentData())
                 for i, caption in enumerate(self.captions):
-                    self.caption_select.addItem(f'#{caption.index} • {caption.text[:75]}', i)
+                    self.caption_select.addItem(f'Câu {caption.index} · {self.timestamp(caption.start*48)}', i)
+                self.loaded_fingerprint=fingerprint
+                self.file_info.setText(f'{len(self.captions)} câu · Thời lượng {self.timestamp(max(c.end for c in self.captions)*48)} · UTF-8')
         except Exception as exc:
-            self.status.setText(str(exc))
+            self.status.setText(vi.message(str(exc)))
         finally:
             self.caption_select.blockSignals(False)
         self.invalidate_base()
@@ -356,15 +398,22 @@ class Window(QMainWindow):
         ms = round(samples/RATE*1000)
         return f'{ms//3600000:02d}:{ms//60000%60:02d}:{ms//1000%60:02d}.{ms%1000:03d}'
 
+    def clear_preview_details(self):
+        for control,label in zip(self.duration_cards,('A · Giọng gốc','B · Đã xử lý','C · Theo mốc SRT')):
+            control.setText(label+'\n—')
+        self.preview_details.setText('Tốc độ cuối: — · Im lặng cuối khung: —\nChưa lấp đầy: — · Chồng tiếng: —')
+
     def show_slot(self):
         try:
-            slot = self.selected_slot()
+            slot=self.selected_slot()
             if slot:
-                self.preview_details.setText(f'Caption #{slot.caption.index} • Start {self.timestamp(slot.start)} • '
-                    f'Allowed End {self.timestamp(slot.end)} • Available {(slot.end-slot.start)/RATE:.3f} s\n'
-                    + self.preview_details.text().split('\n')[-1])
+                self.caption_body.setText(slot.caption.text)
+                self.slot_details.setText(f'Bắt đầu: {self.timestamp(slot.start)}\nKết thúc cho phép: {self.timestamp(slot.end)}\nKhả dụng: {(slot.end-slot.start)/RATE:.3f} giây')
+            else:
+                self.caption_body.setText('Chọn câu trong SRT để nghe C theo mốc thời gian.')
+                self.slot_details.setText('Bắt đầu: — · Kết thúc cho phép: — · Khả dụng: —')
         except Exception as exc:
-            self.preview_details.setText(str(exc))
+            self.slot_details.setText(vi.message(str(exc)))
             self.preview_buttons[2].setEnabled(False)
 
     def preview_voice(self, stage='A'):
@@ -398,37 +447,41 @@ class Window(QMainWindow):
     def success(self, task, result):
         self.bar.setValue(100)
         if task == 'preview':
-            self.preview_temp = tempfile.TemporaryDirectory(prefix='job-', dir=workspace(), ignore_cleanup_errors=True)
-            path = Path(self.preview_temp.name)/'preview.wav'
-            write_wav(path, result.samples, result.rate)
-            self.player.setSource(QUrl.fromLocalFile(str(path)))
+            self.preview_device=QBuffer(self)
+            self.preview_device.setData(QByteArray(wav_bytes(result.samples,result.rate)))
+            self.preview_device.open(QIODevice.ReadOnly)
+            self.player.setSourceDevice(self.preview_device)
             self.player.play()
-            self.status.setText(f'Đang phát {result.stage} • {result.details["emotion"]} • {result.details["effect"]}')
-            d = result.details
-            seconds = lambda value: '—' if value is None else f'{value:.3f} s'
-            detail = f'A: {seconds(d["original_seconds"])}    B: {seconds(d.get("processed_seconds"))}    C: {seconds(d.get("final_seconds"))}'
+            self.status.setText(f'Đang nghe {vi.PREVIEW_LABELS[result.stage]} · {vi.display(result.details["emotion"])} · {vi.display(result.details["effect"])}')
+            d=result.details
+            for control,label,key in zip(self.duration_cards,('A · Giọng gốc','B · Đã xử lý','C · Theo mốc SRT'),('original_seconds','processed_seconds','final_seconds')):
+                value=d.get(key); control.setText(label+'\n'+('—' if value is None else f'{value:.3f} giây'))
+            detail='B dùng cùng giọng gốc A; chỉ thay đổi phần xử lý âm thanh.'
             if 'speed' in d:
-                detail += f'\nFinal Speed: {d["speed"]:.3f}x • Trim: {"Yes" if d["trimmed"] else "No"} • Overlap: {d["overlaps"]}'
-            if 'caption' in d:
-                detail = (f'Caption #{d["caption"]} • Start {self.timestamp(d["start_sample"])} • '
-                    f'Allowed End {self.timestamp(d["allowed_end"])} • Available {d["available_seconds"]:.3f} s\n') + detail
+                detail=f'Tốc độ cuối: {d["speed"]:.3f}× · Đã cắt: {"Có" if d["trimmed"] else "Không"}\nChồng tiếng: {d["overlaps"]} · Im lặng cuối khung: {d["trailing_silence"]:.3f} giây\nChưa lấp đầy: {"CÓ" if d["underfilled"] else "KHÔNG"}'
+                if d['warning']:detail+='\n'+vi.message(d['warning'])
             self.preview_details.setText(detail)
+            self.show_slot()
         elif task == 'diagnose':
-            self.report.setPlainText('\n'.join(result))
+            self.report.setPlainText('\n'.join(vi.message(line) for line in result))
             self.status.setText('Đã kiểm tra • Xem kết quả bên dưới')
         else:
             self.stop_preview()
             self.preview_cache.clear()
-            self.preview_details.setText('A: —    B: —    C: —')
+            self.clear_preview_details()
             self.output = result['output']
             self.open_folder.setEnabled(True)
             trimmed = result['safely_trimmed']
-            self.status.setText('SUCCESS' + (f' • {trimmed} câu đã Safe Trim, cần nghe kiểm tra' if trimmed else ''))
-            self.report.setPlainText(f"Final MP3: {self.output}\nDuration (master): {result['duration']}\n"
-                f"{result['total']} captions • {result['valid']} valid\n"
-                f"Emotion: {result['emotion_mode']} / {result['emotion']} • FX: {result['effect']} / {result['strength']}\n"
-                f"{result['speed_adjusted']} speed adjusted • {trimmed} safely trimmed\n"
-                f"{result['overlaps']} overlaps • TIMELINE VALID")
+            underfilled = result['underfilled_captions']
+            self.status.setText('HOÀN TẤT' + (f' · {trimmed} câu đã cắt an toàn' if trimmed else '')
+                + (f' · {underfilled} câu chưa lấp đầy khung' if underfilled else ''))
+            emotion_label=vi.display(result['emotion']) if result['emotion_mode']=='Manual' else 'Theo từng câu'
+            self.report.setPlainText(f"MP3 cuối: {self.output}\nThời lượng: {result['duration']} · {result['total']} câu · {result['valid']} hợp lệ\n"
+                f"Cảm xúc: {vi.display(result['emotion_mode'])} / {emotion_label} · Hiệu ứng: {vi.display(result['effect'])} / {vi.display(result['strength'])}\n"
+                f"Tăng tốc: {result['speed_up_captions']} · Giảm tốc: {result['slow_down_captions']} · Cắt an toàn: {trimmed}\n"
+                f"Chưa lấp đầy: {underfilled} · Còn thiếu ở giới hạn 0.88×: {result['underfilled_after_hard_minimum']}\n"
+                f"Im lặng cuối khung — Trung bình: {result['average_trailing_silence']:.3f} giây · Lớn nhất: {result['maximum_trailing_silence']:.3f} giây\n"
+                f"{result['overlaps']} chồng tiếng · MỐC THỜI GIAN HỢP LỆ")
 
     def cancel_job(self):
         if self.busy():
@@ -436,9 +489,11 @@ class Window(QMainWindow):
             self.status.setText('Đang hủy… chờ lượt suy luận hiện tại kết thúc.')
 
     def show_error(self, message, details):
-        self.status.setText('Không hoàn tất • ' + message)
+        message=vi.message(message)
+        self.status.setText('Không hoàn tất · ' + message)
         box = QMessageBox(QMessageBox.Critical, 'SRT Voice Studio', message, parent=self)
         box.setDetailedText(details)
+        box.button(QMessageBox.Ok).setText('Đóng')
         box.exec()
 
     def playback_status(self, status):
@@ -448,9 +503,10 @@ class Window(QMainWindow):
     def stop_preview(self):
         self.player.stop()
         self.player.setSource(QUrl())
-        if self.preview_temp:
-            self.preview_temp.cleanup()
-            self.preview_temp = None
+        if self.preview_device is not None:
+            self.preview_device.close()
+            self.preview_device.deleteLater()
+            self.preview_device=None
 
     def open_output(self):
         if self.output:

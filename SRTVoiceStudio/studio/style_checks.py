@@ -54,5 +54,9 @@ def style_checks(backend,cancel,progress):
             assert c.details['trimmed'] and c.details['end_sample']<=slot.end
             assert c.samples[-1]==0 and c.details['overlaps']==0
             checks.append(effect+' Tail Guard: OK')
+        underfill_slot=slots_for([Caption(1,5000,15000,text)])[0]
+        c=cache.get('C',text,settings,backend,cancel,underfill_slot,progress)
+        assert c.details['speed']==.88 and c.details['underfilled'] and c.details['overlaps']==0
+        checks.append('Underfill Fit: OK')
         cache.clear()
     return checks
