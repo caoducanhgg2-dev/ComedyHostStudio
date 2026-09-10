@@ -8,7 +8,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QDoubleSpinBox, QCheckBox, QProgressBar,
-    QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox, QGridLayout, QPlainTextEdit)
+    QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox, QGridLayout, QPlainTextEdit, QTabWidget)
 from .backend import Backend, EN_VOICES, JA_VOICES, PREVIEW
 from .render import render, Settings
 from .paths import workspace
@@ -24,6 +24,7 @@ class Worker(QThread):
     success = Signal(object)
     error = Signal(str, str)
     cancelled = Signal()
+    queue_update = Signal()
 
     def __init__(self, backend, task, params, preview_cache):
         super().__init__()
@@ -36,6 +37,9 @@ class Worker(QThread):
             if self.task == 'render':
                 result = render(**self.params, backend=self.backend, cancel=self.cancel,
                                 progress=self.progress.emit)
+            elif self.task == 'batch':
+                params = dict(self.params); queue = params.pop('queue')
+                result = queue.run(self.backend, **params, update=lambda _: self.queue_update.emit())
             elif self.task == 'preview':
                 result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
                     progress=lambda msg: self.progress.emit(0, 1, msg))
@@ -119,7 +123,8 @@ class Window(QMainWindow):
         subtitle = QLabel('Tiếng Anh (Mỹ) / Tiếng Nhật · Chỉ xuất một MP3 · Giữ nguyên mốc SRT')
         subtitle.setStyleSheet('color:#9db1c9;'); outer.addWidget(subtitle)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        body = QWidget(); scroll.setWidget(body); outer.addWidget(scroll, 1)
+        body = QWidget(); scroll.setWidget(body)
+        self.tabs=QTabWidget();self.tabs.addTab(scroll,'Một tệp / Nghe thử');outer.addWidget(self.tabs,1)
         columns = QHBoxLayout(body); columns.setContentsMargins(0,0,0,0); columns.setSpacing(12)
         left_widget, right_widget = QWidget(), QWidget()
         left, right = QVBoxLayout(left_widget), QVBoxLayout(right_widget)
@@ -246,7 +251,30 @@ class Window(QMainWindow):
         for control in (self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,self.gap,self.overflow):
             control.currentIndexChanged.connect(self.style_changed)
         self.speed.valueChanged.connect(self.style_changed); self.adaptive.toggled.connect(self.style_changed); self.normalize.toggled.connect(self.style_changed)
+        from .batch_ui import BatchPanel
+        self.batch_panel=BatchPanel(self);self.tabs.addTab(self.batch_panel,'Hàng đợi xử lý')
         self.language_changed(); self.refresh_controls()
+        menu=self.menuBar().addMenu('Cấu hình')
+        menu.addAction('Lưu cấu hình hiện tại').triggered.connect(self.save_preferences)
+        menu.addAction('Nạp cấu hình đã lưu').triggered.connect(self.load_preferences)
+
+    def save_preferences(self):
+        from .preferences import save_settings
+        save_settings(self.settings())
+        self.status.setText('Đã lưu cấu hình cho các lần sử dụng sau.')
+
+    def load_preferences(self):
+        if self.busy():return
+        from .preferences import load_settings
+        value=load_settings()
+        for key in ('language','voice','emotion_mode','emotion','intensity','effect','strength','overflow'):
+            control=getattr(self,key);index=control.findData(getattr(value,key))
+            if index>=0:control.setCurrentIndex(index)
+        self.speed.setValue(value.speed if isinstance(value.speed,(float,int)) else 1)
+        index=self.gap.findData(value.gap_ms)
+        if index>=0:self.gap.setCurrentIndex(index)
+        self.adaptive.setChecked(bool(value.adaptive));self.normalize.setChecked(bool(value.loudness))
+        self.status.setText('Đã nạp cấu hình đã lưu.')
 
     def voice_changed(self, *_):
         self.voice_info.setText('Mã giọng: '+str(self.voice.currentData() or '—'))
@@ -282,7 +310,7 @@ class Window(QMainWindow):
                     break
 
     def busy(self):
-        return self.worker is not None and self.worker.isRunning()
+        return self.worker is not None
 
     def start(self, task, params):
         if self.busy():
@@ -296,6 +324,8 @@ class Window(QMainWindow):
         self.diagnostic_action.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.worker = Worker(self.backend, task, params, self.preview_cache)
+        self.batch_panel.set_busy(True)
+        self.worker.queue_update.connect(self.batch_panel.refresh)
         self.worker.progress.connect(self.progress)
         self.worker.success.connect(lambda result: self.success(task, result))
         self.worker.error.connect(self.show_error)
@@ -304,6 +334,10 @@ class Window(QMainWindow):
         self.worker.start()
 
     def finished(self):
+        worker=self.worker
+        self.worker=None
+        if worker is not None:worker.deleteLater()
+        self.batch_panel.set_busy(False)
         for control in self.edit_controls + [self.generate] + self.preview_buttons:
             control.setEnabled(True)
         self.diagnostic_action.setEnabled(True)
@@ -464,6 +498,11 @@ class Window(QMainWindow):
                 if d['warning']:detail+='\n'+vi.message(d['warning'])
             self.preview_details.setText(detail)
             self.show_slot()
+        elif task == 'batch':
+            self.stop_preview();self.preview_cache.clear();self.clear_preview_details()
+            self.batch_panel.refresh()
+            self.status.setText('Đã kết thúc hàng đợi')
+            self.report.setPlainText(self.batch_panel.summary.text())
         elif task == 'diagnose':
             self.report.setPlainText('\n'.join(vi.message(line) for line in result))
             self.status.setText('Đã kiểm tra • Xem kết quả bên dưới')
@@ -487,6 +526,7 @@ class Window(QMainWindow):
 
     def cancel_job(self):
         if self.busy():
+            if self.worker.task=='batch':self.batch_panel.queue.cancel_all()
             self.worker.cancel.set()
             self.status.setText('Đang hủy… chờ lượt suy luận hiện tại kết thúc.')
 
