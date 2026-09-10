@@ -15,6 +15,7 @@ OutputBaseFilename=SRTVoiceStudio_Setup_1.1.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+UninstallDisplayName=SRT Voice Studio
 UninstallDisplayIcon={app}\SRTVoiceStudio.exe
 CloseApplications=yes
 SetupLogging=yes
