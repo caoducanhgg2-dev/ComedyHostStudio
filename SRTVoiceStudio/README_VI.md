@@ -1,6 +1,6 @@
-# SRT Voice Studio — Clean rebuild 1.0.0
+# SRT Voice Studio 1.1.0
 
-**Trạng thái build: xem GitHub Actions trên nhánh `srt-voice-studio/clean-build`.**
+**Trạng thái build: xem GitHub Actions trên nhánh `srt-voice-studio/1.1.0`.**
 Chỉ tải bộ cài từ lần chạy đã đạt toàn bộ kiểm thử. File `acceptance.json` đi kèm artifact ghi kết quả thực thi của đúng bộ cài đó.
 
 ## Sử dụng bản đã đóng gói
@@ -8,8 +8,10 @@ Chỉ tải bộ cài từ lần chạy đã đạt toàn bộ kiểm thử. Fil
 1. Chạy `SRTVoiceStudio_Setup.exe`, bấm Next → Install → Finish.
 2. Mở SRT Voice Studio từ Start Menu hoặc shortcut.
 3. Browse/kéo vào một SRT UTF-8. Chọn English US hoặc Japanese và voice.
-4. Bấm Preview Voice để nghe một câu, nếu cần.
-5. Bấm GENERATE MP3, chọn nơi lưu. Kết quả duy nhất là `TênFile_Voice.mp3`.
+4. Mặc định Manual / Natural / None giữ giọng sạch. Có thể chọn Emotion / Performance, Intensity, Voice Effect và Strength. Auto dùng rule local riêng cho English và Japanese.
+5. A Original nghe TTS gốc; B Processed dùng cùng audio A qua DSP. Đổi style không tổng hợp lại A. Chọn Preview Caption trong SRT để nghe C Final Timeline sau fit/trim/normalize. Sửa Preview Text sẽ trở về custom và tắt C.
+6. C hiển thị slot, độ dài A/B/C, effective speed, trim và overlap. Safe Trim có thể cắt mất từ cuối câu; nghe C để kiểm tra.
+7. Bấm GENERATE MP3, chọn nơi lưu. Kết quả duy nhất là `TênFile_Voice.mp3`.
 
 Bộ cài chứa runtime, Qt, model Kokoro, toàn bộ voice, từ điển và FFmpeg/FFprobe.
 Không tải Python hoặc model khi cài/chạy. Không tài khoản, không API key, không CUDA.
@@ -100,3 +102,13 @@ Xem `TEST_REPORT.md`. Không đánh đồng test timeline dùng synth giả vớ
 - https://pyinstaller.org/en/stable/operating-mode.html
 
 Không đưa API key, token hoặc thông tin riêng vào repo.
+
+## Emotion và FX 1.1.0
+
+Kokoro không có tham số emotion native. Các Performance preset là DSP pitch, EQ, dynamics và tempo; Whisper-like chỉ mô phỏng timbre. Auto Emotion dùng từ khóa/dấu câu, có thể chọn sai ngữ cảnh; Manual cho phép kiểm soát trực tiếp.
+
+FX được áp trước khi đo độ dài và căn slot, gồm cả đuôi Echo/Reverb/Cave. Tổng effective speed (emotion, user speed, fit) không vượt 1.20x. Khi slot quá ngắn, Safe Trim ưu tiên timeline và fade cuối 5 ms; Stop and Report dừng và giữ nguyên MP3 cũ.
+
+A/B/C chỉ phát audio tạm, không xuất thêm file. Một file MP3 mono 48 kHz / 192 kbps được encode một lần từ master PCM. Không có API, cloud, GPU bắt buộc hay phụ thuộc cài ngoài.
+
+Giao diện có vùng cuộn cấu hình; Generate, Cancel và báo cáo luôn nằm phía dưới. Xem `CHANGELOG.md`, `AUDIT_1.0.md` và kết quả acceptance của đúng build trước khi phát hành.

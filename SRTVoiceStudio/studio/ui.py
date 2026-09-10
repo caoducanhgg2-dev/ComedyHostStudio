@@ -8,11 +8,15 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QDoubleSpinBox, QCheckBox, QProgressBar,
-    QTextEdit, QFileDialog, QMessageBox)
+    QTextEdit, QFileDialog, QMessageBox, QScrollArea, QGroupBox)
 from .backend import Backend, EN_VOICES, JA_VOICES, PREVIEW
 from .render import render, Settings
 from .paths import workspace
 from .audio import Cancelled, write_wav
+from .effects import EMOTIONS, EFFECTS, LEVELS
+from .preview import PreviewCache
+from .timeline import read_srt, slots_for, RATE
+from . import __version__
 
 class Worker(QThread):
     progress = Signal(int, int, str)
@@ -20,9 +24,10 @@ class Worker(QThread):
     error = Signal(str, str)
     cancelled = Signal()
 
-    def __init__(self, backend, task, params):
+    def __init__(self, backend, task, params, preview_cache):
         super().__init__()
         self.backend, self.task, self.params = backend, task, params
+        self.preview_cache = preview_cache
         self.cancel = threading.Event()
 
     def run(self):
@@ -31,9 +36,8 @@ class Worker(QThread):
                 result = render(**self.params, backend=self.backend, cancel=self.cancel,
                                 progress=self.progress.emit)
             elif self.task == 'preview':
-                samples, rate = self.backend.synthesize(**self.params, cancel=self.cancel,
+                result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
                     progress=lambda msg: self.progress.emit(0, 1, msg))
-                result = (samples, rate)
             else:
                 from .diagnostics import diagnose
                 result = diagnose(self.backend, self.cancel,
@@ -48,13 +52,16 @@ class Worker(QThread):
 class Window(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('SRT Voice Studio')
-        self.setMinimumSize(700, 760)
+        self.setWindowTitle('SRT Voice Studio ' + __version__)
+        self.setMinimumSize(720, 720)
+        self.resize(840, 900)
         self.setAcceptDrops(True)
         self.backend = Backend()
         self.worker = None
         self.output = None
         self.preview_temp = None
+        self.preview_cache = PreviewCache()
+        self.captions = []
         self.player = QMediaPlayer(self)
         self.audio_output = QAudioOutput(self)
         self.player.setAudioOutput(self.audio_output)
@@ -72,9 +79,16 @@ class Window(QMainWindow):
         ''')
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(28, 20, 28, 20)
-        title = QLabel('SRT Voice Studio')
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(18, 12, 18, 12)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(10, 8, 10, 8)
+        title = QLabel('SRT Voice Studio ' + __version__)
         title.setStyleSheet('font-size: 29px; font-weight: bold;')
         layout.addWidget(title)
         layout.addWidget(QLabel('Offline voices • English US / Japanese • One MP3'))
@@ -94,10 +108,49 @@ class Window(QMainWindow):
         self.language.currentTextChanged.connect(self.language_changed)
         form.addRow('Language', self.language)
         form.addRow('Voice', self.voice)
-        form.addRow('Preview text', self.preview_text)
-        self.preview = QPushButton('▶ Preview Voice')
-        self.preview.clicked.connect(self.preview_voice)
-        form.addRow('', self.preview)
+        layout.addLayout(form)
+        style = QGroupBox('VOICE STYLE')
+        style_form = QFormLayout(style)
+        def combo(items, default=None):
+            box = QComboBox()
+            box.addItems(list(items))
+            if default:
+                box.setCurrentText(default)
+            return box
+        self.emotion_mode = combo(['Manual', 'Auto'])
+        self.emotion = combo(EMOTIONS)
+        self.intensity = combo(LEVELS, 'Medium')
+        self.effect = combo(EFFECTS)
+        self.strength = combo(LEVELS, 'Medium')
+        for label, control in [('Emotion Mode',self.emotion_mode),('Emotion / Performance',self.emotion),
+                ('Emotion Intensity',self.intensity),('Voice Effect',self.effect),('Effect Strength',self.strength)]:
+            style_form.addRow(label,control)
+        note = QLabel('Performance presets dùng DSP local. Whisper-like là mô phỏng bằng DSP.')
+        note.setWordWrap(True)
+        style_form.addRow(note)
+        layout.addWidget(style)
+        preview_group = QGroupBox('VOICE PREVIEW')
+        preview_form = QFormLayout(preview_group)
+        self.caption_select = QComboBox()
+        self.caption_select.addItem('Custom text • chưa chọn caption', None)
+        preview_form.addRow('Preview Caption', self.caption_select)
+        preview_form.addRow('Preview Text', self.preview_text)
+        self.preview_text.setMaxLength(4000)
+        self.preview_buttons = []
+        preview_row = QHBoxLayout()
+        for stage, label in [('A','▶ A Original'),('B','▶ B Processed'),('C','▶ C Final Timeline')]:
+            button = QPushButton(label)
+            button.clicked.connect(lambda checked=False, stage=stage: self.preview_voice(stage))
+            self.preview_buttons.append(button)
+            preview_row.addWidget(button)
+        preview_form.addRow(preview_row)
+        self.preview_details = QLabel('A: —    B: —    C: —')
+        self.preview_details.setWordWrap(True)
+        self.preview_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        preview_form.addRow(self.preview_details)
+        layout.addWidget(preview_group)
+        timeline_group = QGroupBox('STRICT SRT TIMELINE')
+        form = QFormLayout(timeline_group)
         self.speed = QDoubleSpinBox()
         self.speed.setRange(1.0, 1.2)
         self.speed.setSingleStep(0.01)
@@ -115,7 +168,7 @@ class Window(QMainWindow):
         form.addRow('Overflow', self.overflow)
         form.addRow('Compute', QLabel('CPU • Không cần CUDA'))
         form.addRow('Timeline mode', QLabel('STRICT SRT TIMELINE'))
-        layout.addLayout(form)
+        layout.addWidget(timeline_group)
         for text in ('Lock SRT Start Times', 'Never Overlap Voices', 'Delete Temporary Audio'):
             checkbox = QCheckBox(text)
             checkbox.setChecked(True)
@@ -127,6 +180,8 @@ class Window(QMainWindow):
         self.normalize.setChecked(True)
         layout.addWidget(self.adaptive)
         layout.addWidget(self.normalize)
+        layout.addStretch()
+        layout = outer
         self.generate = QPushButton('GENERATE MP3')
         self.generate.setObjectName('generate')
         self.generate.clicked.connect(self.generate_mp3)
@@ -153,18 +208,32 @@ class Window(QMainWindow):
         self.diagnostic_action = self.menuBar().addMenu('Help').addAction('Run Diagnostics')
         self.diagnostic_action.triggered.connect(lambda: self.start('diagnose', {}))
         self.edit_controls = [browse, self.file, self.language, self.voice, self.preview_text,
-            self.speed, self.gap, self.overflow, self.adaptive, self.normalize]
+            self.speed, self.gap, self.overflow, self.adaptive, self.normalize,
+            self.emotion_mode, self.emotion, self.intensity, self.effect, self.strength, self.caption_select]
+        self.file.editingFinished.connect(self.load_captions)
+        self.caption_select.currentIndexChanged.connect(self.caption_changed)
+        self.preview_text.textEdited.connect(self.custom_text_edited)
+        self.voice.currentTextChanged.connect(self.invalidate_base)
+        for control in (self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,self.gap,self.overflow):
+            control.currentIndexChanged.connect(self.style_changed)
+        self.speed.valueChanged.connect(self.style_changed)
+        self.adaptive.toggled.connect(self.style_changed)
+        self.normalize.toggled.connect(self.style_changed)
         self.language_changed('English US')
+        self.refresh_controls()
 
     def language_changed(self, language):
         self.voice.clear()
         self.voice.addItems(JA_VOICES if language == 'Japanese' else EN_VOICES)
-        self.preview_text.setText(PREVIEW[language])
+        if self.caption_select.currentData() is None:
+            self.preview_text.setText(PREVIEW[language])
+        self.invalidate_base()
 
     def browse(self):
         file, _ = QFileDialog.getOpenFileName(self, 'Chọn SRT', '', 'SRT (*.srt)')
         if file:
             self.file.setText(file)
+            self.load_captions()
 
     def dragEnterEvent(self, event):
         if not self.busy() and event.mimeData().hasUrls():
@@ -176,6 +245,7 @@ class Window(QMainWindow):
             for url in event.mimeData().urls():
                 if url.isLocalFile() and url.toLocalFile().lower().endswith('.srt'):
                     self.file.setText(url.toLocalFile())
+                    self.load_captions()
                     event.acceptProposedAction()
                     break
 
@@ -189,11 +259,11 @@ class Window(QMainWindow):
         self.report.clear()
         self.status.setText('Đang chuẩn bị…')
         self.bar.setValue(0)
-        for control in self.edit_controls + [self.generate, self.preview]:
+        for control in self.edit_controls + [self.generate] + self.preview_buttons:
             control.setEnabled(False)
         self.diagnostic_action.setEnabled(False)
         self.cancel_button.setEnabled(True)
-        self.worker = Worker(self.backend, task, params)
+        self.worker = Worker(self.backend, task, params, self.preview_cache)
         self.worker.progress.connect(self.progress)
         self.worker.success.connect(lambda result: self.success(task, result))
         self.worker.error.connect(self.show_error)
@@ -202,20 +272,109 @@ class Window(QMainWindow):
         self.worker.start()
 
     def finished(self):
-        for control in self.edit_controls + [self.generate, self.preview]:
+        for control in self.edit_controls + [self.generate] + self.preview_buttons:
             control.setEnabled(True)
         self.diagnostic_action.setEnabled(True)
         self.cancel_button.setEnabled(False)
+        self.refresh_controls()
 
     def progress(self, done, total, message):
         self.bar.setValue(int(done * 100 / max(total, 1)))
         self.status.setText(message)
 
-    def preview_voice(self):
+    def settings(self):
+        return Settings(language=self.language.currentText(), voice=self.voice.currentText(),
+            speed=self.speed.value(), gap_ms=self.gap.currentData(), adaptive=self.adaptive.isChecked(),
+            loudness=self.normalize.isChecked(), overflow=self.overflow.currentText(),
+            emotion_mode=self.emotion_mode.currentText(), emotion=self.emotion.currentText(),
+            intensity=self.intensity.currentText(), effect=self.effect.currentText(), strength=self.strength.currentText())
+
+    def refresh_controls(self):
+        idle = not self.busy()
+        self.emotion.setEnabled(idle and self.emotion_mode.currentText() == 'Manual')
+        self.intensity.setEnabled(idle and self.emotion_mode.currentText() == 'Manual' and self.emotion.currentText() != 'Natural')
+        self.strength.setEnabled(idle and self.effect.currentText() != 'None')
+        self.preview_buttons[2].setEnabled(idle and self.caption_select.currentData() is not None)
+
+    def invalidate_base(self, *_):
+        if self.busy():
+            return
+        self.stop_preview()
+        self.preview_cache.clear()
+        self.preview_details.setText('A: —    B: —    C: —')
+
+    def style_changed(self, *_):
+        self.stop_preview()
+        a = self.preview_cache.base
+        self.preview_details.setText(f'A: {len(a)/self.preview_cache.rate:.3f} s    B: —    C: —' if a is not None else 'A: —    B: —    C: —')
+        self.refresh_controls()
+        self.show_slot()
+
+    def custom_text_edited(self, *_):
+        self.caption_select.blockSignals(True)
+        self.caption_select.setCurrentIndex(0)
+        self.caption_select.blockSignals(False)
+        self.invalidate_base()
+        self.refresh_controls()
+
+    def load_captions(self):
+        if self.busy():
+            return
+        self.captions = []
+        self.caption_select.blockSignals(True)
+        self.caption_select.clear()
+        self.caption_select.addItem('Custom text • chọn caption để nghe C', None)
+        try:
+            if self.file.text().strip():
+                self.captions = read_srt(Path(self.file.text().strip()))
+                slots_for(self.captions, self.gap.currentData())
+                for i, caption in enumerate(self.captions):
+                    self.caption_select.addItem(f'#{caption.index} • {caption.text[:75]}', i)
+        except Exception as exc:
+            self.status.setText(str(exc))
+        finally:
+            self.caption_select.blockSignals(False)
+        self.invalidate_base()
+        self.refresh_controls()
+
+    def caption_changed(self, *_):
+        index = self.caption_select.currentData()
+        if index is not None:
+            self.preview_text.setText(self.captions[index].text)
+        self.invalidate_base()
+        self.refresh_controls()
+        self.show_slot()
+
+    def selected_slot(self):
+        index = self.caption_select.currentData()
+        if index is None:
+            return None
+        return slots_for(self.captions, self.gap.currentData())[index]
+
+    @staticmethod
+    def timestamp(samples):
+        ms = round(samples/RATE*1000)
+        return f'{ms//3600000:02d}:{ms//60000%60:02d}:{ms//1000%60:02d}.{ms%1000:03d}'
+
+    def show_slot(self):
+        try:
+            slot = self.selected_slot()
+            if slot:
+                self.preview_details.setText(f'Caption #{slot.caption.index} • Start {self.timestamp(slot.start)} • '
+                    f'Allowed End {self.timestamp(slot.end)} • Available {(slot.end-slot.start)/RATE:.3f} s\n'
+                    + self.preview_details.text().split('\n')[-1])
+        except Exception as exc:
+            self.preview_details.setText(str(exc))
+            self.preview_buttons[2].setEnabled(False)
+
+    def preview_voice(self, stage='A'):
         if not self.preview_text.text().strip():
             return
-        self.start('preview', dict(text=self.preview_text.text(), language=self.language.currentText(),
-                                   voice=self.voice.currentText()))
+        try:
+            slot = self.selected_slot()
+            self.start('preview', dict(stage=stage, text=self.preview_text.text(), settings=self.settings(), slot=slot))
+        except Exception as exc:
+            self.show_error(str(exc), traceback.format_exc())
 
     def generate_mp3(self):
         file = Path(self.file.text().strip())
@@ -233,9 +392,7 @@ class Window(QMainWindow):
             return
         if not output.lower().endswith('.mp3'):
             output += '.mp3'
-        settings = Settings(self.language.currentText(), self.voice.currentText(), self.speed.value(),
-                            self.gap.currentData(), self.adaptive.isChecked(), self.normalize.isChecked(),
-                            self.overflow.currentText())
+        settings = self.settings()
         self.start('render', dict(srt=file, output=output, settings=settings))
 
     def success(self, task, result):
@@ -243,20 +400,33 @@ class Window(QMainWindow):
         if task == 'preview':
             self.preview_temp = tempfile.TemporaryDirectory(prefix='job-', dir=workspace(), ignore_cleanup_errors=True)
             path = Path(self.preview_temp.name)/'preview.wav'
-            write_wav(path, *result)
+            write_wav(path, result.samples, result.rate)
             self.player.setSource(QUrl.fromLocalFile(str(path)))
             self.player.play()
-            self.status.setText('Đang phát preview')
+            self.status.setText(f'Đang phát {result.stage} • {result.details["emotion"]} • {result.details["effect"]}')
+            d = result.details
+            seconds = lambda value: '—' if value is None else f'{value:.3f} s'
+            detail = f'A: {seconds(d["original_seconds"])}    B: {seconds(d.get("processed_seconds"))}    C: {seconds(d.get("final_seconds"))}'
+            if 'speed' in d:
+                detail += f'\nFinal Speed: {d["speed"]:.3f}x • Trim: {"Yes" if d["trimmed"] else "No"} • Overlap: {d["overlaps"]}'
+            if 'caption' in d:
+                detail = (f'Caption #{d["caption"]} • Start {self.timestamp(d["start_sample"])} • '
+                    f'Allowed End {self.timestamp(d["allowed_end"])} • Available {d["available_seconds"]:.3f} s\n') + detail
+            self.preview_details.setText(detail)
         elif task == 'diagnose':
             self.report.setPlainText('\n'.join(result))
             self.status.setText('Đã kiểm tra • Xem kết quả bên dưới')
         else:
+            self.stop_preview()
+            self.preview_cache.clear()
+            self.preview_details.setText('A: —    B: —    C: —')
             self.output = result['output']
             self.open_folder.setEnabled(True)
             trimmed = result['safely_trimmed']
             self.status.setText('SUCCESS' + (f' • {trimmed} câu đã Safe Trim, cần nghe kiểm tra' if trimmed else ''))
             self.report.setPlainText(f"Final MP3: {self.output}\nDuration (master): {result['duration']}\n"
                 f"{result['total']} captions • {result['valid']} valid\n"
+                f"Emotion: {result['emotion_mode']} / {result['emotion']} • FX: {result['effect']} / {result['strength']}\n"
                 f"{result['speed_adjusted']} speed adjusted • {trimmed} safely trimmed\n"
                 f"{result['overlaps']} overlaps • TIMELINE VALID")
 
@@ -293,4 +463,5 @@ class Window(QMainWindow):
             self.status.setText('Đang hủy. Hãy đóng cửa sổ sau khi tác vụ dừng.')
         else:
             self.stop_preview()
+            self.preview_cache.clear()
             event.accept()

@@ -1,3 +1,20 @@
+# Version 1.1.0 — validation in progress
+
+Baseline audit is in AUDIT_1.0.md. Before edits, 18 original regression tests passed.
+After implementation, 62 tests passed on Linux in 59.20 seconds. These cover all
+12 emotion presets and 16 FX choices at all three strengths with real FFmpeg,
+immutable A and cache invalidation, identical C/production fit, first silence,
+Echo tail, capped effective speed, Stop and Report preserving an old MP3,
+and 74-caption Auto/Cave Strong synthetic-audio renders in English and Japanese.
+
+A GUI control test using a synthetic backend passed A/B/C and Generate with one
+MP3 and preview cleanup. No claim of audible speech quality is made from that test.
+Windows frozen, installed-app, real Kokoro 74-caption, upgrade and uninstall
+results must be taken from acceptance.json of the successful 1.1.0 workflow.
+Do not interpret this pre-build report as a Windows pass.
+
+---
+
 # Windows build đã xác minh — 09/09/2026
 
 - GitHub Actions run: https://github.com/caoducanhgg2-dev/ComedyHostStudio/actions/runs/34382171196

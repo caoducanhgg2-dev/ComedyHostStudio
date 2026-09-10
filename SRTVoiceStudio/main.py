@@ -2,6 +2,7 @@ import sys
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+from studio import __version__
 from studio.paths import data_dir, clean_stale, workspace
 
 def main():
@@ -12,6 +13,7 @@ def main():
     from PySide6.QtWidgets import QApplication, QMessageBox
     app = QApplication(sys.argv)
     app.setApplicationName('SRT Voice Studio')
+    app.setApplicationVersion(__version__)
     lock = QLockFile(str(data_dir()/'instance.lock'))
     lock.setStaleLockTime(0)
     if not lock.tryLock(100):
@@ -22,7 +24,11 @@ def main():
     handler = RotatingFileHandler(logdir/'latest.log', maxBytes=2_000_000, backupCount=2, encoding='utf-8')
     logging.basicConfig(level=logging.INFO, handlers=[handler], format='%(asctime)s %(levelname)s %(message)s')
     try:
+        logging.info('SRT Voice Studio %s', __version__)
         clean_stale()
+        if '--stress-test' in sys.argv:
+            from studio.stress import stress_test
+            return stress_test()
         if '--self-test' in sys.argv:
             from studio.diagnostics import self_test
             return self_test()
@@ -30,12 +36,12 @@ def main():
         window = Window()
         window.show()
         if '--ui-smoke' in sys.argv:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(1500, app.quit)
+            from studio.ui_checks import UiChecks
+            checks = UiChecks(app, window)
         return app.exec()
     except Exception as exc:
         logging.exception('Startup error')
-        if '--self-test' not in sys.argv:
+        if '--self-test' not in sys.argv and '--stress-test' not in sys.argv:
             QMessageBox.critical(None, 'Không mở được ứng dụng', str(exc))
         return 1
     finally:

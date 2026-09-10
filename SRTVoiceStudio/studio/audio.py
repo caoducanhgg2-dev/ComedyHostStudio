@@ -29,6 +29,8 @@ def run(args, cancel, cwd=None):
             if code:
                 log.seek(0)
                 raise RuntimeError(log.read().decode('utf-8', 'replace')[-6000:])
+            log.seek(0)
+            return log.read().decode('utf-8', 'replace')
         finally:
             if proc.poll() is None:
                 proc.terminate()

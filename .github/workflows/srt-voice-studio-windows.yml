@@ -6,6 +6,7 @@ on:
   pull_request:
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     runs-on: windows-latest
@@ -32,6 +33,8 @@ jobs:
         run: python build_tools/prepare_assets.py
       - name: Unit and real PCM tests
         run: python -m pytest -q --junitxml=test-results.xml
+      - name: Verify actual bundled FFmpeg filters
+        run: python build_tools/verify_filters.py
       - name: Build frozen app
         run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
       - name: Test frozen app before installer
@@ -39,20 +42,29 @@ jobs:
       - name: Build installer
         shell: cmd
         run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
-      - name: Test installer, offline English and Japanese, Unicode paths, uninstall
+      - name: Download verified 1.0 installer for upgrade acceptance
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup
+          run-id: 34382171196
+          github-token: ${{ github.token }}
+          path: SRTVoiceStudio/baseline-installer
+      - name: Test upgrade, clean install, offline A-B-C, real 74 captions, uninstall
         run: python build_tools/smoke_installer.py
       - name: Installer checksum
         run: |
-          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup.exe -Algorithm SHA256).Hash
-          "$digest  SRTVoiceStudio_Setup.exe" | Set-Content installer-output/SHA256SUMS.txt
+          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup_1.1.0.exe -Algorithm SHA256).Hash
+          "$digest  SRTVoiceStudio_Setup_1.1.0.exe" | Set-Content installer-output/SHA256SUMS.txt
       - name: Upload verified installer
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_Setup
+          name: SRTVoiceStudio_Setup_1.1.0
           path: |
-            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup.exe
+            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup_1.1.0.exe
             SRTVoiceStudio/installer-output/SHA256SUMS.txt
             SRTVoiceStudio/installer-output/acceptance.json
+            SRTVoiceStudio/test-results.xml
+            SRTVoiceStudio/filter-validation.json
           if-no-files-found: error
       - name: Collect app logs
         if: always()
@@ -60,6 +72,9 @@ jobs:
           New-Item -ItemType Directory -Force ci-logs | Out-Null
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/logs/latest.log" ci-logs/latest.log -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/self-test.json" ci-logs/self-test.json -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-test.json" ci-logs/ui-test.json -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-preview.png" ci-logs/ui-preview.png -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/stress-test.json" ci-logs/stress-test.json -ErrorAction SilentlyContinue
           exit 0
       - name: Build diagnostics
         if: always()

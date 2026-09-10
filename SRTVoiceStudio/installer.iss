@@ -1,7 +1,8 @@
 [Setup]
 AppId={{68F0C1C1-17CB-4CED-8261-5C18EB92571A}
 AppName=SRT Voice Studio
-AppVersion=1.0.0
+AppVersion=1.1.0
+VersionInfoVersion=1.1.0.0
 AppPublisher=SRT Voice Studio
 DefaultDirName={localappdata}\Programs\SRTVoiceStudio
 DefaultGroupName=SRT Voice Studio
@@ -10,7 +11,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir=installer-output
-OutputBaseFilename=SRTVoiceStudio_Setup
+OutputBaseFilename=SRTVoiceStudio_Setup_1.1.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
