@@ -62,3 +62,15 @@ def test_router_registration_failure_is_atomic_and_refresh_removes_stale():
     assert router.routes==before and router.engines['Aivis'] is engine
     router.register(LocalVoicevoxBackend('Aivis',10101,[replace(v,id='aivis:second')]))
     assert 'aivis:first' not in router.routes and 'aivis:second' in router.routes
+
+
+def test_native_style_belongs_to_selected_voice(api):
+    port,calls,_=api
+    v=VoiceInfo('aivis:test','Test','Japanese','Aivis',style_id=42,styles=({'id':42,'name':'Normal'},{'id':43,'name':'Happy'}))
+    b=LocalVoicevoxBackend('Aivis',port,[v]);cancel=threading.Event()
+    b.synthesize_style('テスト','Japanese',v.id,43,cancel)
+    assert all('speaker=43' in path for path,_ in calls)
+    with pytest.raises(ValueError):b.synthesize_style('テスト','Japanese',v.id,99,cancel)
+    b.synthesize('テスト','Japanese',v.id,cancel)
+    assert all('speaker=42' in path for path,_ in calls[-2:])
+    assert len(b.list_voices())==1

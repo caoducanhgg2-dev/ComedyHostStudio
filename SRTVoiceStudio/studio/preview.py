@@ -9,6 +9,7 @@ from .paths import workspace
 from .effects import EffectProcessor, selected_emotion
 from .fitting import fit_processed
 from .timeline import RATE
+from .voice_backends import synthesize_selected
 
 @dataclass
 class PreviewResult:
@@ -34,10 +35,10 @@ class PreviewCache:
         if stage == 'C' and (slot is None or text != slot.caption.text):
             raise ValueError('Chọn caption SRT để nghe Final Timeline.')
         check_cancel(cancel)
-        key = (settings.language,settings.voice,text)
+        key = (settings.language,settings.voice,settings.native_style,text)
         if key != self.key:
             self.clear()
-            samples,rate = backend.synthesize(text,settings.language,settings.voice,cancel,progress)
+            samples,rate = synthesize_selected(backend,text,settings,cancel,progress)
             original = np.asarray(samples,dtype=np.float32).reshape(-1).copy()
             if not len(original) or not np.isfinite(original).all() or not np.any(np.abs(original)>1e-7):
                 raise RuntimeError('TTS trả về audio rỗng hoặc không hợp lệ.')

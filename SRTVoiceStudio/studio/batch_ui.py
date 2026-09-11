@@ -17,7 +17,7 @@ class ItemEditor(QDialog):
         self.settings=item.settings;self.backend=parent.window.backend
         form=QFormLayout(self)
         self.controls={}
-        for key,label,mapping in [('language','Ngôn ngữ',vi.LANGUAGES),('voice','Giọng đọc',{}),
+        for key,label,mapping in [('language','Ngôn ngữ',vi.LANGUAGES),('voice','Giọng đọc',{}),('native_style','Phong cách bản địa',{}),
             ('emotion_mode','Chế độ cảm xúc',vi.MODES),('emotion','Cảm xúc',vi.EMOTIONS),
             ('intensity','Mức cảm xúc',vi.INTENSITIES),('effect','Hiệu ứng',vi.EFFECTS),
             ('strength','Độ mạnh hiệu ứng',vi.INTENSITIES)]:
@@ -26,7 +26,9 @@ class ItemEditor(QDialog):
             combo.setCurrentIndex(combo.findData(getattr(item.settings,key)))
             form.addRow(label,combo)
         self.controls['language'].currentIndexChanged.connect(self.voices)
+        self.controls['voice'].currentIndexChanged.connect(self.native_styles)
         self.voices();self.controls['voice'].setCurrentIndex(self.controls['voice'].findData(item.settings.voice))
+        self.controls['native_style'].setCurrentIndex(self.controls['native_style'].findData(item.settings.native_style))
         self.controls['emotion_mode'].currentIndexChanged.connect(self.refresh)
         self.controls['effect'].currentIndexChanged.connect(self.refresh)
         buttons=QDialogButtonBox();buttons.addButton('Áp dụng',QDialogButtonBox.AcceptRole);buttons.addButton('Hủy',QDialogButtonBox.RejectRole)
@@ -42,6 +44,10 @@ class ItemEditor(QDialog):
         self.controls['strength'].setEnabled(self.controls['effect'].currentData()!='None')
     def value(self):
         return replace(self.settings,**{k:c.currentData() for k,c in self.controls.items()})
+    def native_styles(self):
+        c=self.controls['native_style'];c.clear();c.addItem('Mặc định',None)
+        for style in self.backend.styles(self.controls['voice'].currentData()):c.addItem(style['name'],style['id'])
+        c.setEnabled(c.count()>1)
 
 class BatchPanel(QWidget):
     def __init__(self,window):

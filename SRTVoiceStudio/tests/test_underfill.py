@@ -80,3 +80,15 @@ def test_30_caption_reference_comparison(context):
     result=run_comparison(CountingBackend(3.4),cancel,source,folder)
     assert result['slow_down_captions']==30 and result['underfilled_captions']==0
     assert result['average_trailing_silence']<.3 and result['reduction_percent']>50
+
+
+def test_native_style_invalidates_original_cache(context):
+    folder,cancel=context
+    class StyledBackend(CountingBackend):
+        def synthesize_style(self,text,language,voice,style,cancel,progress):return self.synthesize()
+    b=StyledBackend(3.4);cache=PreviewCache();s=Settings(native_style=42)
+    cache.get('A','sample',s,b,cancel)
+    cache.get('B','sample',replace(s,effect='Robot'),b,cancel)
+    assert b.count==1
+    cache.get('A','sample',replace(s,native_style=43),b,cancel)
+    assert b.count==2

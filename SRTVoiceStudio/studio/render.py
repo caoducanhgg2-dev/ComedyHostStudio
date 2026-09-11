@@ -9,6 +9,7 @@ from .paths import workspace
 from .audio import encode, check_cancel
 from .effects import EffectProcessor
 from .fitting import fit_processed
+from .voice_backends import synthesize_selected
 
 @dataclass(frozen=True)
 class Settings:
@@ -24,6 +25,7 @@ class Settings:
     intensity: str = 'Medium'
     effect: str = 'None'
     strength: str = 'Medium'
+    native_style: int | None = None
 
 def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
     if not 1.0 <= settings.speed <= 1.2:
@@ -55,7 +57,7 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                 check_cancel(cancel)
                 c = slot.caption
                 progress(i, len(slots), f'Creating voice {i+1} / {len(slots)} • Caption {c.index}')
-                samples, rate = backend.synthesize(c.text, settings.language, settings.voice, cancel,
+                samples, rate = synthesize_selected(backend,c.text,settings,cancel,
                     lambda msg: progress(i, len(slots), msg))
                 samples = np.asarray(samples, dtype=np.float32).reshape(-1)
                 if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):

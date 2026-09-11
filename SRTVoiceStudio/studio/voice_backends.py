@@ -29,6 +29,11 @@ class VoiceBackend(Protocol):
     def styles(self,voice): ...
     def license_info(self,voice): ...
 
+def synthesize_selected(backend,text,settings,cancel,progress=lambda _:None):
+    if settings.native_style is None:
+        return backend.synthesize(text,settings.language,settings.voice,cancel,progress)
+    return backend.synthesize_style(text,settings.language,settings.voice,settings.native_style,cancel,progress)
+
 class KokoroBackend(Backend):
     def list_voices(self):
         return [VoiceInfo(v,v.split('_',1)[1].title(),lang,'Kokoro',license='Apache-2.0',source='https://huggingface.co/hexgrad/Kokoro-82M')
@@ -65,12 +70,17 @@ class LocalVoicevoxBackend:
     def license_info(self,voice):
         v=self.voices[voice];return dict(license=v.license,source=v.source)
     def synthesize(self,text,language,voice,cancel,progress=lambda _:None):
+        return self.synthesize_style(text,language,voice,None,cancel,progress)
+    def synthesize_style(self,text,language,voice,style,cancel,progress=lambda _:None):
         v=self.voices.get(voice)
         if v is None or language!=v.language:raise ValueError('Giọng không khớp ngôn ngữ hoặc chưa được cài.')
+        style_id=v.style_id if style is None else style
+        if style is not None and (type(style) is not int or style not in {s['id'] for s in v.styles}):
+            raise ValueError('Phong cách bản địa không thuộc giọng đã chọn.')
         if self.ensure_started:self.ensure_started(cancel,progress)
-        query=json.loads(self.request('/audio_query',cancel,params={'text':text,'speaker':v.style_id}))
+        query=json.loads(self.request('/audio_query',cancel,params={'text':text,'speaker':style_id}))
         query.update(speedScale=1.0,outputSamplingRate=48000,outputStereo=False)
-        raw=self.request('/synthesis',cancel,query,{'speaker':v.style_id})
+        raw=self.request('/synthesis',cancel,query,{'speaker':style_id})
         with wave.open(io.BytesIO(raw)) as f:
             if f.getsampwidth()!=2:raise RuntimeError('Backend trả WAV không phải PCM16.')
             channels=f.getnchannels();rate=f.getframerate()
@@ -101,6 +111,12 @@ class BackendRouter:
         if voice not in self.routes:raise ValueError('Giọng chưa được cài.')
         return self.engines[self.routes[voice]].synthesize(text,language,voice,cancel,progress)
     def list_voices(self):return [v for e in self.engines.values() for v in e.list_voices()]
+    def styles(self,voice):return self.engines[self.routes[voice]].styles(voice) if voice in self.routes else ()
+    def synthesize_style(self,text,language,voice,style,cancel,progress=lambda _:None):
+        if voice not in self.routes:raise ValueError('Giọng chưa được cài.')
+        backend=self.engines[self.routes[voice]]
+        if not backend.capabilities()['native_styles']:raise ValueError('Giọng này không có phong cách bản địa.')
+        return backend.synthesize_style(text,language,voice,style,cancel,progress)
     def load(self,cancel,progress):return self.kokoro.load(cancel,progress)
     @property
     def model(self):return self.kokoro.model

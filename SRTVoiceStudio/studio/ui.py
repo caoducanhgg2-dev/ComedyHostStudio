@@ -156,6 +156,7 @@ class Window(QMainWindow):
         voices_row.addWidget(language_card,2)
         voice_card = QGroupBox('③  Giọng đọc'); voice_box = QVBoxLayout(voice_card)
         self.voice = QComboBox(); voice_box.addWidget(self.voice)
+        self.native_style=QComboBox();self.native_style.addItem('Phong cách bản địa: mặc định',None);voice_box.addWidget(self.native_style)
         self.voice_info = QLabel(); self.voice_info.setStyleSheet('color:#9db1c9;'); voice_box.addWidget(self.voice_info)
         voices_row.addWidget(voice_card,3)
         style_box = group('④  Phong cách giọng · tùy chọn', left)
@@ -241,7 +242,7 @@ class Window(QMainWindow):
         outer.addWidget(self.report)
         self.diagnostic_action=self.menuBar().addMenu('Trợ giúp').addAction('Kiểm tra ứng dụng')
         self.diagnostic_action.triggered.connect(lambda:self.start('diagnose',{}))
-        self.edit_controls=[browse,self.file,self.language,self.voice,self.preview_text,self.caption_select,
+        self.edit_controls=[browse,self.file,self.language,self.voice,self.native_style,self.preview_text,self.caption_select,
             self.previous_caption,self.next_caption,self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,
             self.speed,self.gap,self.overflow,self.adaptive,self.normalize]
         self.language.currentIndexChanged.connect(self.language_changed)
@@ -249,6 +250,7 @@ class Window(QMainWindow):
         self.caption_select.currentIndexChanged.connect(self.caption_changed)
         self.preview_text.textEdited.connect(self.custom_text_edited)
         self.voice.currentIndexChanged.connect(self.voice_changed)
+        self.native_style.currentIndexChanged.connect(self.invalidate_base)
         for control in (self.emotion_mode,self.emotion,self.intensity,self.effect,self.strength,self.gap,self.overflow):
             control.currentIndexChanged.connect(self.style_changed)
         self.speed.valueChanged.connect(self.style_changed); self.adaptive.toggled.connect(self.style_changed); self.normalize.toggled.connect(self.style_changed)
@@ -270,7 +272,7 @@ class Window(QMainWindow):
         if self.busy():return
         from .preferences import load_settings
         value=load_settings()
-        for key in ('language','voice','emotion_mode','emotion','intensity','effect','strength','overflow'):
+        for key in ('language','voice','native_style','emotion_mode','emotion','intensity','effect','strength','overflow'):
             control=getattr(self,key);index=control.findData(getattr(value,key))
             if index>=0:control.setCurrentIndex(index)
         self.speed.setValue(value.speed if isinstance(value.speed,(float,int)) else 1)
@@ -281,6 +283,9 @@ class Window(QMainWindow):
 
     def voice_changed(self, *_):
         self.voice_info.setText('Mã giọng: '+str(self.voice.currentData() or '—'))
+        self.native_style.clear();self.native_style.addItem('Phong cách bản địa: mặc định',None)
+        for style in self.backend.styles(self.voice.currentData()):self.native_style.addItem(style['name'],style['id'])
+        self.native_style.setEnabled(not self.busy() and self.native_style.count()>1)
         self.invalidate_base()
 
     def language_changed(self, *_):
@@ -361,10 +366,11 @@ class Window(QMainWindow):
             speed=self.speed.value(), gap_ms=self.gap.currentData(), adaptive=self.adaptive.isChecked(),
             loudness=self.normalize.isChecked(), overflow=self.overflow.currentData(),
             emotion_mode=self.emotion_mode.currentData(), emotion=self.emotion.currentData(),
-            intensity=self.intensity.currentData(), effect=self.effect.currentData(), strength=self.strength.currentData())
+            intensity=self.intensity.currentData(), effect=self.effect.currentData(), strength=self.strength.currentData(),native_style=self.native_style.currentData())
 
     def refresh_controls(self):
         idle = not self.busy()
+        self.native_style.setEnabled(idle and self.native_style.count()>1)
         self.emotion.setEnabled(idle and self.emotion_mode.currentData() == 'Manual')
         self.intensity.setEnabled(idle and self.emotion_mode.currentData() == 'Manual' and self.emotion.currentData() != 'Natural')
         self.strength.setEnabled(idle and self.effect.currentData() != 'None')
