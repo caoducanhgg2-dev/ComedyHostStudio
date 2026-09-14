@@ -9,6 +9,7 @@ permissions:
   actions: read
 env:
   BASELINE_COMMIT: f0c382929aec77b5a880438560d56a424aa6ce8a
+  BASELINE_RUN: '34854705948'
   FROM_VERSION: 1.3.0
   TO_VERSION: 1.3.1
 jobs:
@@ -18,23 +19,10 @@ jobs:
     steps:
       - name: Checkout update source
         uses: actions/checkout@v4
-      - name: Checkout exact 1.3.0 baseline
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BASELINE_COMMIT }}
-          path: _baseline
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.10'
           architecture: x64
-      - name: Verify baseline build inputs are unchanged
-        shell: pwsh
-        run: |
-          foreach ($file in @('requirements-windows.lock','SRTVoiceStudio.spec','build_tools/prepare_assets.py')) {
-            $a=(Get-FileHash "SRTVoiceStudio/$file" -Algorithm SHA256).Hash
-            $b=(Get-FileHash "_baseline/SRTVoiceStudio/$file" -Algorithm SHA256).Hash
-            if ($a -ne $b) { throw "Baseline build input changed: $file" }
-          }
       - name: Install locked Windows wheels
         working-directory: SRTVoiceStudio
         shell: pwsh
@@ -49,46 +37,88 @@ jobs:
       - name: Prepare current offline assets
         working-directory: SRTVoiceStudio
         run: python build_tools/prepare_assets.py
-      - name: Reuse identical runtime assets for baseline build
-        shell: pwsh
-        run: |
-          foreach ($item in @('models','third_party','bin')) {
-            Remove-Item "_baseline/SRTVoiceStudio/$item" -Recurse -Force -ErrorAction SilentlyContinue
-            Copy-Item "SRTVoiceStudio/$item" "_baseline/SRTVoiceStudio/$item" -Recurse -Force
-          }
       - name: Unit and real PCM tests
         working-directory: SRTVoiceStudio
         run: python -m pytest -q --junitxml=test-results.xml
       - name: Verify bundled FFmpeg filters
         working-directory: SRTVoiceStudio
         run: python build_tools/verify_filters.py
-      - name: Build exact 1.3.0 frozen baseline
-        working-directory: _baseline/SRTVoiceStudio
-        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
       - name: Build current frozen app
         working-directory: SRTVoiceStudio
         run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
       - name: Test current frozen app
         working-directory: SRTVoiceStudio
         run: python build_tools/check_frozen.py
-      - name: Build delta ZIP only
+      - name: Download exact released 1.3.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
+          github-token: ${{ github.token }}
+          path: baseline-release
+      - name: Verify released installer checksum and stage real 1.3.0 install
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem baseline-release -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
+          if ($null -eq $installer) { throw 'Released 1.3.0 installer was not found in the verified artifact.' }
+          $sum = Join-Path $installer.DirectoryName 'SHA256SUMS.txt'
+          if (-not (Test-Path -LiteralPath $sum)) { throw 'Released SHA256SUMS.txt is missing.' }
+          $expected = ((Get-Content -LiteralPath $sum -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Released installer checksum mismatch: $actual != $expected" }
+
+          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+          & $installer.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS "/DIR=$target"
+          if ($LASTEXITCODE -ne 0) { throw "1.3.0 installer exited with $LASTEXITCODE" }
+          if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Installed 1.3.0 executable is missing.' }
+          if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'Installed 1.3.0 uninstaller is missing.' }
+
+          New-Item -ItemType Directory -Force SRTVoiceStudio/update-output | Out-Null
+          [ordered]@{
+            run = $env:BASELINE_RUN
+            commit = $env:BASELINE_COMMIT
+            installer = $installer.Name
+            installer_sha256 = $actual
+            install_path = $target
+            source = 'verified GitHub Actions release artifact'
+          } | ConvertTo-Json | Set-Content SRTVoiceStudio/update-output/baseline-release.json -Encoding UTF8
+      - name: Build delta ZIP only from released installed baseline
         working-directory: SRTVoiceStudio
         run: >-
           python build_tools/build_update_zip.py
-          --baseline ../_baseline/SRTVoiceStudio/dist/SRTVoiceStudio
+          --baseline ../baseline-installed
           --current dist/SRTVoiceStudio
           --output-dir update-output
           --from-version ${{ env.FROM_VERSION }}
           --to-version ${{ env.TO_VERSION }}
           --baseline-commit ${{ env.BASELINE_COMMIT }}
-      - name: Test ZIP updater, exact result, idempotency and corruption guard
+          --baseline-run ${{ env.BASELINE_RUN }}
+      - name: Test ZIP updater, exact app result, idempotency and corruption guard
         working-directory: SRTVoiceStudio
         run: >-
           python build_tools/test_update_zip.py
-          --baseline ../_baseline/SRTVoiceStudio/dist/SRTVoiceStudio
+          --baseline ../baseline-installed
           --current dist/SRTVoiceStudio
           --package update-output/SRTVoiceStudio_Update_${{ env.FROM_VERSION }}_to_${{ env.TO_VERSION }}.zip
           --result update-output/update-acceptance.json
+      - name: Test real no-EXE update path via installed registry
+        shell: pwsh
+        run: |
+          $package = 'SRTVoiceStudio/update-output/SRTVoiceStudio_Update_1.3.0_to_1.3.1.zip'
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'registry-update-package'
+          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $package -DestinationPath $expanded -Force
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Registry-driven ZIP updater exited with $LASTEXITCODE" }
+
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if (-not (Test-Path $reg)) { throw 'Installed app registry record is missing after update.' }
+          $info = Get-ItemProperty -Path $reg
+          if ([string]$info.DisplayVersion -ne '1.3.1') { throw "DisplayVersion was not updated: $($info.DisplayVersion)" }
+          $target = [string]$info.InstallLocation
+          if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Updated executable is missing.' }
+          if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'ZIP update removed the installer-managed uninstaller.' }
       - name: ZIP checksum
         working-directory: SRTVoiceStudio
         shell: pwsh
@@ -106,6 +136,7 @@ jobs:
             SRTVoiceStudio/update-output/update_manifest.json
             SRTVoiceStudio/update-output/update-build.json
             SRTVoiceStudio/update-output/update-acceptance.json
+            SRTVoiceStudio/update-output/baseline-release.json
           if-no-files-found: error
       - name: Upload diagnostics
         if: always()
@@ -118,4 +149,5 @@ jobs:
             SRTVoiceStudio/build-assets/sha256.json
             SRTVoiceStudio/build/SRTVoiceStudio/warn-SRTVoiceStudio.txt
             SRTVoiceStudio/filter-validation.json
+            SRTVoiceStudio/update-output/baseline-release.json
           if-no-files-found: warn
