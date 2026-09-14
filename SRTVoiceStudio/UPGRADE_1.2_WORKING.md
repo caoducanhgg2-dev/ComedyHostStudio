@@ -1,14 +1,33 @@
-# SRT Voice Studio 1.2.0 — trạng thái đang nghiệm thu
+# SRT Voice Studio 1.2.0 — nghiệm thu tự động đã hoàn tất
 
-Baseline: source và installer 1.1.0 đã xác minh, commit `33fea46f83c3ab360ece2567915412037b5ecbf3`. Mọi phần nâng cấp được tiếp tục trên nhánh `srt-voice-studio/1.2.0`.
+Baseline: source và installer 1.1.0 đã xác minh, commit `33fea46f83c3ab360ece2567915412037b5ecbf3`.
 
-Source đang được build/kiểm thử Windows: `8000defcbb2d35367ed72e57918c19dbe153be57`.
-Lượt chạy: https://github.com/caoducanhgg2-dev/ComedyHostStudio/actions/runs/34819873200
+Source code 1.2.0 đã được build/kiểm thử Windows tại commit `18143e9844b6b9e73b737723a22f1213c07c98bc`.
+Lượt chạy xác minh: `34822400144` — SUCCESS.
+Nhánh đóng băng hồ sơ release: `release/srt-voice-studio-1.2.0`.
 
-Đã triển khai: hàng đợi nền tuần tự, cấu hình chung/riêng, hủy/thử lại, đầu ra tránh ghi đè, lưu cấu hình và yêu thích; router giữ Kokoro, gói Aivis tùy chọn có checksum và tải theo yêu cầu, Mao/Kohaku và phong cách bản địa; thư viện giọng tiếng Việt và nhập CSV điểm nghe có trọng số; Underfill V2, C Preview và render dùng chung fitting, START khóa tuyệt đối; comparator EN7 thực tế 46 caption và bộ nghe thử tám loại nội dung Anh/Nhật.
+## Kết quả cuối của nghiệm thu tự động
 
-Ngày 14/09/2026, 101 test source đạt trong 372,50 giây. Kiểm tra thao tác nhập CSV và bộ lọc đề xuất trong GUI cũng đạt với dữ liệu thử tạm, không lưu điểm giả vào giọng thật. Windows đã vượt qua test, đóng gói frozen app, self-test và tạo installer. Kiểm tra nâng cấp/cài sạch/offline/render thực tế đang chạy.
+- 103/103 pytest đạt, 0 lỗi, 0 bỏ qua; 69.295 giây.
+- Frozen app, self-test, FFmpeg filters và build installer: PASS.
+- Nâng cấp tại chỗ từ 1.1.0: PASS.
+- Cài sạch: PASS.
+- Offline A/B/C + render English US/Japanese: PASS.
+- Unicode/Vietnamese/Japanese path: PASS.
+- Batch 1/5/20 file: PASS; file lỗi không dừng hàng đợi; retry PASS.
+- Underfill V2: PASS; START không đổi; overlap 0.
+- Stress 74 caption English US/Japanese: 74/74 hợp lệ, overlap 0.
+- 5 giọng Nhật Kokoro: real TTS + A/B/C PASS.
+- Aivis Mao/Kohaku optional pack: native style + shared A/B/C fit PASS; stress overlap 0; START không đổi.
+- Upgrade/uninstall và clean/uninstall: PASS.
 
-Lỗi nghiệm thu ở lượt trước: đường dẫn baseline không tính thư mục lồng bên trong artifact. Đã sửa tìm đúng một installer theo tên, vẫn kiểm SHA-256 chính xác trước cài.
+Installer đã xác minh: `SRTVoiceStudio_Setup_1.2.0.exe`, 465403067 byte.
+SHA-256: `48C10CBB68B09E2458D651F6057B592DFDF88C8F6B947425761A41F9A3FBE132`.
 
-Chưa FINAL VERIFIED. Cần kết quả nghiệm thu Windows, installer/checksum/report và bộ nghe thử. Không tự chứng nhận độ tự nhiên hoặc tuyển đủ số lượng giọng đạt chất lượng khi chưa có điểm nghe. Phong cách bản địa không được tính thành giọng mới.
+## Phần không được tự chứng nhận
+
+Bộ benchmark hiện có 27 giọng kỹ thuật đạt nhưng `ratings.csv` chưa có điểm nghe của con người. Vì vậy không tự gán 8/10, 9/10, KEEP/REJECT theo chất lượng cảm nhận hoặc nhãn Đề xuất. Phong cách bản địa của cùng một speaker không được tính thành giọng mới.
+
+Trạng thái chính xác: **AUTOMATED WINDOWS ACCEPTANCE VERIFIED**; **VOICE NATURALNESS NOT HUMAN-CERTIFIED**.
+
+Chi tiết đầy đủ nằm trong `RELEASE_1.2.0.md`, `VOICE_RESEARCH_1.2.md` và artifact của run `34822400144`.
