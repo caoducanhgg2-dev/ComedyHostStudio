@@ -1,11 +1,12 @@
 # SRT Voice Studio 1.3.1
 
 - Chuyển cơ chế cập nhật từ chạy lại installer EXE sang **ZIP delta**.
-- Gói cập nhật chỉ chứa file mới/thay đổi so với frozen build 1.3.0; workflow từ chối nếu vô tình đóng gói toàn bộ app.
+- Gói cập nhật chỉ chứa file mới/thay đổi so với bản 1.3.0 đã phát hành; workflow từ chối nếu vô tình đóng gói toàn bộ app.
 - `Apply_Update.cmd` gọi PowerShell updater, tự tìm thư mục cài, yêu cầu đóng app, kiểm tra SHA-256 baseline trước khi ghi đè và cập nhật `DisplayVersion` sau khi thành công.
 - Có rollback file trong phiên cập nhật nếu bước ghi/verify thất bại.
-- CI dựng lại chính xác commit nền 1.3.0, áp ZIP lên bản nền trong thư mục Unicode, kiểm tra kết quả byte-for-byte với build 1.3.1, kiểm tra idempotent và từ chối baseline bị sửa.
-- Không chạy Inno Setup trong luồng phát hành update 1.3.1; installer 1.3.0 giữ vai trò bản cài đầy đủ ban đầu.
+- CI tải đúng artifact installer 1.3.0 từ run đã nghiệm thu, kiểm tra checksum, cài im lặng vào staging rồi dùng chính các byte đã cài làm baseline cho ZIP delta.
+- Acceptance kiểm tra thư mục Unicode, kết quả app sau patch khớp byte-for-byte với build 1.3.1, chạy patch lần hai không đổi kết quả, baseline bị sửa phải bị từ chối trước khi ghi đè, và file uninstall do Inno Setup quản lý vẫn được giữ nguyên.
+- Không chạy Inno Setup trong luồng phát hành update 1.3.1; installer 1.3.0 chỉ giữ vai trò bản cài đầy đủ ban đầu.
 
 # SRT Voice Studio 1.3.0
 
