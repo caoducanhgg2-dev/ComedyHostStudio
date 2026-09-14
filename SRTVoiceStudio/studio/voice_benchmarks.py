@@ -24,6 +24,15 @@ TEXTS={
   ('long','After three careful attempts, the team finally lifted the heavy wooden frame into place.'),
   ('numbers','On September twenty first, Michael packed twelve tools.'),
   ('punctuation','Really? A window here? Fine, let the sunshine in!')],
+ 'English UK':[
+  ('dialogue','Wait, you built all of this by yourself?'),
+  ('review','The little cottage looks surprisingly warm and comfortable.'),
+  ('comedy','That chair clearly skipped every single leg workout.'),
+  ('narration','At sunrise, a quiet village slowly came to life.'),
+  ('short','Well, that was unexpected.'),
+  ('long','After three careful attempts, the team finally lifted the heavy wooden frame into place.'),
+  ('numbers','On the twenty first of September, Michael packed twelve tools.'),
+  ('punctuation','Really? A window here? Brilliant, let the sunshine in!')],
  'Japanese':[
   ('dialogue','えっ、これを全部一人で作ったんですか？'),
   ('review','小さな部屋ですが、意外と暖かそうですね。'),
@@ -62,7 +71,7 @@ def generate(folder,cancel):
                 naturalness=None,pronunciation=None,expression=None,speed_fit=None,audio_quality=None,popularity=None,
                 weighted_score=None,listening_status='Pending human listening',recommended=False,
                 average_trailing_silence=result['average_trailing_silence'],overlaps=0,records=result['records']))
-            cards.append(f'<section><h2>{html.escape(voice.name)} · {html.escape(voice.id)}</h2><p>{html.escape(voice.license)}</p>'
+            cards.append(f'<section><h2>{html.escape(voice.name)} · {html.escape(voice.id)}</h2><p>{html.escape(voice.language)} · {html.escape(voice.license)}</p>'
                 f'<p>A · Gốc</p><audio controls preload="none" src="{name}/A_original.mp3"></audio>'
                 f'<p>C · Theo mốc SRT</p><audio controls preload="none" src="{name}/C_final.mp3"></audio></section>')
         (folder/'benchmark.json').write_text(json.dumps({'weights_percent':WEIGHTS,'voices':results},ensure_ascii=False,indent=2),encoding='utf-8')
