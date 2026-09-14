@@ -1,4 +1,4 @@
-"""Installed 1.2 acceptance entrypoints. Real backends, no synthetic TTS."""
+"""Installed 1.3 acceptance entrypoints. Real backends, no synthetic TTS."""
 import json
 import logging
 from pathlib import Path
@@ -15,24 +15,28 @@ from .stress import timestamp
 
 def batch_test(folder,cancel):
     backend=Backend();results=[]
+    cases=(
+        ('English US','am_michael','Today we begin a surprising new story.','English US'),
+        ('English UK','bf_emma','Today we begin a rather surprising new story.','British English'),
+        ('Japanese','jf_alpha','今日は新しい物語を紹介します。','Tiếng Nhật 日本語'))
     for count in (1,5,20):
         case=folder/str(count);case.mkdir();queue=BatchQueue()
+        languages=[]
         for i in range(count):
-            japanese=i%2==1
-            source=case/f'{i:02d}_Tiếng Nhật 日本語.srt'
-            text='今日は新しい物語を紹介します。' if japanese else 'Today we begin a surprising new story.'
+            language,voice,text,label=cases[i%len(cases)]
+            source=case/f'{i:02d}_{label}.srt'
             source.write_text('1\n00:00:05,000 --> 00:00:09,000\n'+text+'\n',encoding='utf-8')
-            queue.add([source],Settings(language='Japanese' if japanese else 'English US',voice='jf_alpha' if japanese else 'am_michael'))
+            queue.add([source],Settings(language=language,voice=voice));languages.append(language)
         counts=queue.run(backend,case/'output')
         assert counts[DONE]==count and len(list((case/'output').glob('*.mp3')))==count
         assert all(i.report['overlaps']==0 and i.report['records'][0]['start_sample']==240000 for i in queue.items)
-        results.append(dict(files=count,completed=count,overlaps=0,start_times_unchanged=True))
+        results.append(dict(files=count,completed=count,overlaps=0,start_times_unchanged=True,languages=sorted(set(languages))))
     bad=folder/'invalid.srt';bad.write_text('invalid')
     good=folder/'valid.srt';good.write_text('1\n00:00:00,000 --> 00:00:04,000\nThis is the final short test.\n')
     queue=BatchQueue();queue.add([bad,good],Settings());counts=queue.run(backend,folder/'retry-output')
     assert counts[FAILED]==1 and counts[DONE]==1
     bad.write_text(good.read_text());queue.retry();assert queue.run(backend,folder/'retry-output')[DONE]==2
-    return dict(cases=results,failed_file_continues=True,retry_passed=True)
+    return dict(cases=results,failed_file_continues=True,retry_passed=True,british_batch=True)
 
 
 def optional_test(folder,cancel):
