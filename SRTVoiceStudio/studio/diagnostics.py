@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from .paths import workspace, executable, data_dir
 from .audio import run, encode, check_cancel
-from .backend import Backend, PREVIEW, JA_VOICES
+from .backend import Backend, PREVIEW, JA_VOICES, EN_GB_VOICES
 from .render import render, Settings
 from .timeline import parse, slots_for, validate
 from . import __version__
@@ -28,7 +28,7 @@ def diagnose(backend, cancel, progress):
             except Exception as exc:
                 check_cancel(cancel)
                 results.append(f'{name}: FAILED — {exc}')
-        for language, voice in [('English US', 'af_heart'), ('Japanese', 'jf_alpha')]:
+        for language, voice in [('English US', 'af_heart'), ('English UK', 'bf_emma'), ('Japanese', 'jf_alpha')]:
             try:
                 audio, rate = backend.synthesize(PREVIEW[language], language, voice, cancel, progress)
                 assert len(audio) > rate * 0.1 and np.isfinite(audio).all() and np.max(np.abs(audio)) > 0.001
@@ -83,9 +83,14 @@ def self_test():
             folder = Path(folder)/'LỒNG TIẾNG'/'Test App'
             folder.mkdir(parents=True)
             from .audio import run
-            for language, voice, text in [('English US','am_puck','Hello, this is a test.'),
-                                          ('Japanese','jm_kumo','これは音声のテストです。')]:
-                file = folder/('日本語 テスト.srt' if language == 'Japanese' else 'English.srt')
+            cases=[('English US','am_puck','Hello, this is a test.'),
+                   ('English UK','bf_emma','Hello, this is a British voice test.'),
+                   ('Japanese','jm_kumo','これは音声のテストです。')]
+            for language, voice, text in cases:
+                if language == 'Japanese':name='日本語 テスト.srt'
+                elif language == 'English UK':name='British English.srt'
+                else:name='English.srt'
+                file = folder/name
                 file.write_text(f'1\n00:00:05,000 --> 00:00:09,420\n{text}\n', encoding='utf-8-sig')
                 output = file.with_name(file.stem+'_Voice.mp3')
                 report = render(file, output, Settings(language=language,voice=voice,emotion='Dramatic',effect='Cave'),backend,cancel)
@@ -102,7 +107,6 @@ def self_test():
                 a, rate = backend.synthesize(PREVIEW['Japanese'],'Japanese',voice,cancel)
                 assert len(a)>rate/10
                 from .preview import PreviewCache
-                from dataclasses import replace
                 cache=PreviewCache()
                 text=PREVIEW['Japanese']
                 slot=slots_for(parse(f'1\n00:00:00,000 --> 00:00:03,000\n{text}'))[0]
@@ -112,8 +116,12 @@ def self_test():
                     assert len(preview.samples)>0
                 assert preview.details['overlaps']==0
             result['all_japanese_voices'] = 'OK (5 voices, real TTS + A/B/C)'
-            from .paths import root
-            installed_srt = root().parent/'日本語 テスト.srt'
+            british={}
+            for voice in EN_GB_VOICES:
+                a,rate=backend.synthesize(PREVIEW['English UK'],'English UK',voice,cancel)
+                assert len(a)>rate/10 and np.isfinite(a).all()
+                british[voice]=len(a)/rate
+            result['all_british_voices']={'status':'OK','voices':british,'count':len(british)}
             # Windows acceptance optionally supplies a writable D: Unicode test location.
             import os
             if os.environ.get('SRTVS_UNICODE_TEST_DIR'):
