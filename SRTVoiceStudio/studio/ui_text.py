@@ -1,5 +1,5 @@
 """Vietnamese display labels; stable backend IDs are stored as combo itemData."""
-LANGUAGES={'English US':'Tiếng Anh (Mỹ)','Japanese':'Tiếng Nhật'}
+LANGUAGES={'English US':'Tiếng Anh (Mỹ)','English UK':'Tiếng Anh (Anh)','Japanese':'Tiếng Nhật'}
 MODES={'Manual':'Thủ công','Auto':'Tự động'}
 INTENSITIES={'Mild':'Nhẹ','Medium':'Vừa','Strong':'Mạnh'}
 EMOTIONS={'Natural':'Tự nhiên','Happy':'Vui vẻ','Excited':'Hào hứng','Funny / Playful':'Dí dỏm / Vui nhộn',
@@ -14,11 +14,12 @@ PREVIEW_LABELS={'A':'A · Giọng gốc','B':'B · Đã xử lý','C':'C · Theo
 
 def voice_label(voice):
     if not isinstance(voice,str):return 'Chưa chọn giọng'
-    if len(voice)<4 or voice[:3] not in ('af_','am_','jf_','jm_'):return voice
+    if len(voice)<4 or voice[:3] not in ('af_','am_','bf_','bm_','jf_','jm_'):return voice
     name=voice.split('_',1)[1].replace('_',' ').title()
     gender='Nữ' if voice[1]=='f' else 'Nam'
+    region=' · Anh' if voice[0]=='b' else ''
     if voice=='am_onyx':return 'Onyx — Nam · Trầm / Kể chuyện'
-    return f'{name} — {gender}'
+    return f'{name} — {gender}{region}'
 
 def display(value):
     for mapping in (LANGUAGES,MODES,INTENSITIES,EMOTIONS,EFFECTS,OVERFLOWS):
@@ -42,7 +43,8 @@ def message(text):
      'Japanese G2P':'Chuyển âm vị tiếng Nhật','Kokoro backend':'Bộ tạo giọng Kokoro',
      'Overlap Validator':'Kiểm tra chồng tiếng','MP3 encoder / output directory':'Bộ mã hóa MP3 / thư mục đầu ra',
      'MP3 encoder':'Bộ mã hóa MP3','English US TTS':'Tạo giọng tiếng Anh (Mỹ)',
-     'Japanese TTS':'Tạo giọng tiếng Nhật','Emotion / FX / Preview':'Cảm xúc / hiệu ứng / nghe thử',
+     'English UK TTS':'Tạo giọng tiếng Anh (Anh)','Japanese TTS':'Tạo giọng tiếng Nhật',
+     'Emotion / FX / Preview':'Cảm xúc / hiệu ứng / nghe thử',
      'Backend / G2P / Validator':'Bộ tạo giọng / âm vị / kiểm tra',
      'audio generated':'đã tạo âm thanh','same immutable A':'dùng cùng giọng gốc A',
      'production fit':'dùng chung bộ căn thời gian','invalid boundary rejected':'đã chặn vượt mốc',
