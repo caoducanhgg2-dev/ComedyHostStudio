@@ -7,7 +7,7 @@ import wave
 import urllib.request
 import urllib.parse
 import numpy as np
-from .backend import Backend, EN_VOICES, JA_VOICES, PREVIEW
+from .backend import Backend, EN_US_VOICES, EN_GB_VOICES, JA_VOICES, PREVIEW
 from .audio import check_cancel
 
 @dataclass(frozen=True)
@@ -36,8 +36,9 @@ def synthesize_selected(backend,text,settings,cancel,progress=lambda _:None):
 
 class KokoroBackend(Backend):
     def list_voices(self):
+        groups=(('English US',EN_US_VOICES),('English UK',EN_GB_VOICES),('Japanese',JA_VOICES))
         return [VoiceInfo(v,v.split('_',1)[1].title(),lang,'Kokoro',license='Apache-2.0',source='https://huggingface.co/hexgrad/Kokoro-82M')
-                for lang,voices in [('English US',EN_VOICES),('Japanese',JA_VOICES)] for v in voices]
+                for lang,voices in groups for v in voices]
     def capabilities(self):return dict(offline=True,cpu=True,native_styles=False)
     def styles(self,voice):return ()
     def license_info(self,voice):return dict(license='Apache-2.0',source='https://huggingface.co/hexgrad/Kokoro-82M')
