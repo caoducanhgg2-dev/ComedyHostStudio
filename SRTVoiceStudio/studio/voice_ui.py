@@ -1,6 +1,6 @@
 """Voice catalogue: license provenance and honest pending listening status."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QListWidget,QListWidgetItem,QLabel,QPushButton,QTextBrowser
+from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QListWidget,QListWidgetItem,QLabel,QPushButton,QTextBrowser,QCheckBox
 from . import preferences
 from . import ui_text as vi
 
@@ -20,10 +20,26 @@ class VoicePanel(QWidget):
         row=QHBoxLayout();self.use=QPushButton('Dùng giọng này');self.favorite=QPushButton('☆ Thêm yêu thích')
         row.addWidget(self.use);row.addWidget(self.favorite);layout.addLayout(row)
         self.status=QLabel();self.status.setWordWrap(True);layout.addWidget(self.status)
+        from .aivis_pack import LICENSE_NOTICE,LICENSE_URL
+        notice=QLabel(LICENSE_NOTICE);notice.setWordWrap(True);layout.addWidget(notice)
+        link=QLabel(f'<a href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
+        self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận các điều kiện sử dụng gói Aivis');layout.addWidget(self.accept_license)
+        self.install=QPushButton('Tải gói thử nghiệm Aivis • Mao + Kohaku');layout.addWidget(self.install)
+        self.accept_license.toggled.connect(self.refresh_install);self.install.clicked.connect(self.install_pack)
         self.filter.currentIndexChanged.connect(self.refresh)
         self.list.currentItemChanged.connect(self.selection)
         self.use.clicked.connect(self.select_voice);self.favorite.clicked.connect(self.toggle_favorite)
         self.refresh()
+        self.refresh_install()
+
+    def refresh_install(self):
+        installed=self.window.aivis_pack.available()
+        self.install.setText('Gói Aivis đã cài' if installed else 'Tải gói thử nghiệm Aivis • Mao + Kohaku')
+        self.install.setEnabled(not installed and not self.window.busy() and self.accept_license.isChecked())
+
+    def install_pack(self):
+        if self.window.busy() or not self.accept_license.isChecked():return
+        self.window.start('install_aivis',dict(pack=self.window.aivis_pack))
 
     def selected(self):
         item=self.list.currentItem()

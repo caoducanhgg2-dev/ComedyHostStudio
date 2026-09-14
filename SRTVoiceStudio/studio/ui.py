@@ -41,6 +41,8 @@ class Worker(QThread):
             elif self.task == 'batch':
                 params = dict(self.params); queue = params.pop('queue')
                 result = queue.run(self.backend, **params, update=lambda _: self.queue_update.emit())
+            elif self.task == 'install_aivis':
+                result=self.params['pack'].install(self.cancel,self.progress.emit)
             elif self.task == 'preview':
                 result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
                     progress=lambda msg: self.progress.emit(0, 1, msg))
@@ -77,6 +79,12 @@ class Window(QMainWindow):
                     min(940,max(self.minimumHeight(),available.height()-60)))
         self.setAcceptDrops(True)
         self.backend = BackendRouter()
+        from .aivis_pack import AivisPack
+        self.aivis_pack=AivisPack()
+        try:
+            optional=self.aivis_pack.backend()
+            if optional:self.backend.register(optional)
+        except (OSError,ValueError,KeyError):logging.exception('Cannot load optional voice pack metadata')
         self.worker = None
         self.output = None
         self.preview_temp = None  # Compatibility: previews now use memory only.
@@ -333,6 +341,7 @@ class Window(QMainWindow):
         self.cancel_button.setEnabled(True)
         self.worker = Worker(self.backend, task, params, self.preview_cache)
         self.batch_panel.set_busy(True)
+        self.voice_panel.install.setEnabled(False)
         self.worker.queue_update.connect(self.batch_panel.refresh)
         self.worker.progress.connect(self.progress)
         self.worker.success.connect(lambda result: self.success(task, result))
@@ -346,6 +355,7 @@ class Window(QMainWindow):
         self.worker=None
         if worker is not None:worker.deleteLater()
         self.batch_panel.set_busy(False)
+        self.voice_panel.refresh_install()
         for control in self.edit_controls + [self.generate] + self.preview_buttons:
             control.setEnabled(True)
         self.diagnostic_action.setEnabled(True)
@@ -491,7 +501,14 @@ class Window(QMainWindow):
 
     def success(self, task, result):
         self.bar.setValue(100)
-        if task == 'preview':
+        if task == 'install_aivis':
+            optional=self.aivis_pack.backend()
+            if optional:self.backend.register(optional)
+            previous=self.voice.currentData();self.language_changed()
+            index=self.voice.findData(previous)
+            if index>=0:self.voice.setCurrentIndex(index)
+            self.voice_panel.refresh();self.status.setText('Đã cài gói Aivis. Giọng mới nằm trong Tiếng Nhật; chưa có điểm nghe xác nhận.')
+        elif task == 'preview':
             self.preview_device=QBuffer(self)
             self.preview_device.setData(QByteArray(wav_bytes(result.samples,result.rate)))
             self.preview_device.open(QIODevice.ReadOnly)
@@ -572,4 +589,5 @@ class Window(QMainWindow):
         else:
             self.stop_preview()
             self.preview_cache.clear()
+            self.aivis_pack.close()
             event.accept()
