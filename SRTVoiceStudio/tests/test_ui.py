@@ -14,11 +14,15 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
         assert w.settings().language=='English US' and w.settings().voice=='af_heart'
         assert w.settings().emotion=='Natural' and w.settings().effect=='None'
         assert w.language.currentText()=='Tiếng Anh (Mỹ)' and w.generate.text()=='▶  TẠO MP3'
-        assert w.height()<=w.screen().availableGeometry().height()
-        assert not w.preview_buttons[2].isEnabled()
+        assert w.language.findData('English UK')>=0
+        w.language.setCurrentIndex(w.language.findData('English UK'))
+        assert w.language.currentText()=='Tiếng Anh (Anh)'
+        assert w.voice.count()==8 and w.voice.findData('bf_emma')>=0
         w.language.setCurrentIndex(w.language.findData('Japanese'))
         w.voice.setCurrentIndex(w.voice.findData('jm_kumo'))
         assert w.settings().voice=='jm_kumo' and 'Kumo' in w.voice.currentText()
+        assert w.height()<=w.screen().availableGeometry().height()
+        assert not w.preview_buttons[2].isEnabled()
         w.emotion_mode.setCurrentIndex(w.emotion_mode.findData('Auto'))
         assert not w.emotion.isEnabled()
         source=tmp_path/'日本語.srt';source.write_text('1\n00:00:00,000 --> 00:00:04,000\nこれはテストです。',encoding='utf-8')
@@ -44,7 +48,10 @@ def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,m
     w=Window()
     try:
         p=w.voice_panel
-        assert p.list.count()==25
+        assert p.list.count()==33
+        p.filter.setCurrentIndex(p.filter.findData('en'))
+        assert p.list.count()==28
+        assert any(p.list.item(i).data(256)=='bf_emma' for i in range(p.list.count()))
         p.filter.setCurrentIndex(p.filter.findData('ja'))
         assert p.list.count()==5
         selected=p.selected().id;p.toggle_favorite()
