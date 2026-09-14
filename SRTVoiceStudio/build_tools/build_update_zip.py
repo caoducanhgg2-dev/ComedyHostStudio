@@ -1,4 +1,4 @@
-"""Build a delta ZIP update from two frozen SRT Voice Studio folders."""
+"""Build a delta ZIP update from a released install and a new frozen app."""
 from __future__ import annotations
 
 import argparse
@@ -17,12 +17,22 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def inventory(root: Path) -> dict[str, Path]:
-    return {
-        p.relative_to(root).as_posix(): p
-        for p in root.rglob("*")
-        if p.is_file()
-    }
+def is_installer_managed(rel: str) -> bool:
+    """Files created by Inno Setup are preserved, never patched/deleted."""
+    path = Path(rel)
+    return len(path.parts) == 1 and path.name.lower().startswith("unins")
+
+
+def inventory(root: Path, *, ignore_installer_managed: bool = False) -> dict[str, Path]:
+    files: dict[str, Path] = {}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if ignore_installer_managed and is_installer_managed(rel):
+            continue
+        files[rel] = path
+    return files
 
 
 def main() -> int:
@@ -33,6 +43,7 @@ def main() -> int:
     parser.add_argument("--from-version", required=True)
     parser.add_argument("--to-version", required=True)
     parser.add_argument("--baseline-commit", required=True)
+    parser.add_argument("--baseline-run", default="")
     args = parser.parse_args()
 
     baseline = Path(args.baseline).resolve()
@@ -43,10 +54,10 @@ def main() -> int:
     if not (current / "SRTVoiceStudio.exe").is_file():
         raise SystemExit(f"Invalid current folder: {current}")
 
-    old = inventory(baseline)
+    old = inventory(baseline, ignore_installer_managed=True)
     new = inventory(current)
-    changed = []
-    deleted = []
+    changed: list[dict[str, object]] = []
+    deleted: list[dict[str, object]] = []
 
     for rel in sorted(new):
         old_hash = digest(old[rel]) if rel in old else None
@@ -81,9 +92,13 @@ def main() -> int:
         "from_version": args.from_version,
         "to_version": args.to_version,
         "baseline_commit": args.baseline_commit,
+        "baseline_run": args.baseline_run,
+        "baseline_kind": "verified-installed-release",
+        "preserve_installer_files": "root unins*",
         "files": changed,
         "delete": deleted,
         "stats": {
+            "baseline_app_file_count": len(old),
             "current_file_count": len(new),
             "changed_file_count": len(changed),
             "deleted_file_count": len(deleted),
