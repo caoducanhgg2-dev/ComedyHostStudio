@@ -1,0 +1,178 @@
+name: Split SRT Voice Studio 1.3.0
+
+on:
+  push:
+    branches:
+      - tools/split-srt-1.3.0
+    paths:
+      - '.github/workflows/split-srt-voice-studio-1.3.0.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  split-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Download verified 1.3.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          path: artifact
+          github-token: ${{ github.token }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          run-id: 34854705948
+
+      - name: Split installer and create merge helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Get-ChildItem artifact -Recurse -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'Installer EXE not found in source artifact.' }
+
+          $expected = 'F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC'
+          $actual = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actual -ne $expected) { throw "Installer SHA256 mismatch: $actual" }
+
+          New-Item -ItemType Directory -Force -Path split | Out-Null
+          $chunkSize = 70MB
+          $bufferSize = 1MB
+          $buffer = New-Object byte[] $bufferSize
+          $input = [System.IO.File]::OpenRead($exe.FullName)
+          $partNames = New-Object System.Collections.Generic.List[string]
+          try {
+            $index = 0
+            while ($input.Position -lt $input.Length) {
+              $partName = ('SRTVoiceStudio_1.3.0.part{0:D2}.bin' -f $index)
+              $partPath = Join-Path 'split' $partName
+              $partNames.Add($partName)
+              $output = [System.IO.File]::Create($partPath)
+              try {
+                $remaining = [Math]::Min([int64]$chunkSize, $input.Length - $input.Position)
+                while ($remaining -gt 0) {
+                  $toRead = [int][Math]::Min([int64]$buffer.Length, $remaining)
+                  $read = $input.Read($buffer, 0, $toRead)
+                  if ($read -le 0) { break }
+                  $output.Write($buffer, 0, $read)
+                  $remaining -= $read
+                }
+              } finally {
+                $output.Dispose()
+              }
+              $index++
+            }
+          } finally {
+            $input.Dispose()
+          }
+
+          $copyExpr = ($partNames -join '+')
+          $bat = @"
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          echo Dang ghep SRT Voice Studio 1.3.0...
+          copy /b $copyExpr SRTVoiceStudio_Setup_1.3.0.exe >nul
+          if errorlevel 1 (
+            echo LOI: Khong the ghep file.
+            pause
+            exit /b 1
+          )
+          echo.
+          echo Da tao SRTVoiceStudio_Setup_1.3.0.exe
+          echo SHA256 dung phai la:
+          echo F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC
+          echo.
+          certutil -hashfile SRTVoiceStudio_Setup_1.3.0.exe SHA256
+          echo.
+          echo Neu ma SHA256 trung dong tren thi file da ghep chinh xac.
+          pause
+          "@
+          Set-Content -Path 'split\GHEP_SRTVoiceStudio_1.3.0.bat' -Value $bat -Encoding ASCII
+
+          $guide = @"
+          HUONG DAN GHEP SRT VOICE STUDIO 1.3.0
+
+          1. Giai nen tat ca cac goi part vao CUNG MOT THU MUC.
+          2. Dam bao co day du cac file part00, part01... va GHEP_SRTVoiceStudio_1.3.0.bat.
+          3. Nhan dup GHEP_SRTVoiceStudio_1.3.0.bat.
+          4. File tao ra: SRTVoiceStudio_Setup_1.3.0.exe
+          5. SHA256 dung:
+          F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC
+          "@
+          Set-Content -Path 'split\HUONG_DAN_GHEP_1.3.0.txt' -Value $guide -Encoding UTF8
+
+          Get-FileHash split\*.bin -Algorithm SHA256 | ForEach-Object {
+            "{0}  {1}" -f $_.Hash.ToUpperInvariant(), [System.IO.Path]::GetFileName($_.Path)
+          } | Set-Content 'split\PARTS_SHA256SUMS.txt' -Encoding ASCII
+
+          $manifest = [ordered]@{
+            source_installer = 'SRTVoiceStudio_Setup_1.3.0.exe'
+            source_sha256 = $actual
+            source_size = $exe.Length
+            chunk_size_bytes = [int64]$chunkSize
+            parts = @()
+          }
+          foreach ($name in $partNames) {
+            $p = Join-Path 'split' $name
+            $manifest.parts += [ordered]@{
+              name = $name
+              size = (Get-Item $p).Length
+              sha256 = (Get-FileHash $p -Algorithm SHA256).Hash.ToUpperInvariant()
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content 'split\manifest.json' -Encoding UTF8
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part00
+          path: split/SRTVoiceStudio_1.3.0.part00.bin
+          compression-level: 0
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part01
+          path: split/SRTVoiceStudio_1.3.0.part01.bin
+          compression-level: 0
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part02
+          path: split/SRTVoiceStudio_1.3.0.part02.bin
+          compression-level: 0
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part03
+          path: split/SRTVoiceStudio_1.3.0.part03.bin
+          compression-level: 0
+      - name: Upload part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part04
+          path: split/SRTVoiceStudio_1.3.0.part04.bin
+          compression-level: 0
+      - name: Upload part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part05
+          path: split/SRTVoiceStudio_1.3.0.part05.bin
+          compression-level: 0
+      - name: Upload part 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_part06
+          path: split/SRTVoiceStudio_1.3.0.part06.bin
+          compression-level: 0
+
+      - name: Upload merge helper
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_merge_helper
+          path: |
+            split/GHEP_SRTVoiceStudio_1.3.0.bat
+            split/HUONG_DAN_GHEP_1.3.0.txt
+            split/PARTS_SHA256SUMS.txt
+            split/manifest.json
+          compression-level: 9
