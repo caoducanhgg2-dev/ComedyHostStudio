@@ -104,8 +104,8 @@ class AivisPack:
         self.engine=LocalEngine(metadata['engine'],self.runtime/'data')
         voices=[]
         for uid,name,base,styles in [
-            ('e756b8e4-b606-4e15-99b1-3f9c6a1b2317','Mao — Nữ',888753760,['Tự nhiên','Đời thường','Ngọt ngào','Điềm tĩnh','Trêu đùa','Man mác buồn']),
-            ('5680ac39-43c9-487a-bc3e-018c0d29cc38','Kohaku — Nữ',1878365376,['Tự nhiên','Ngọt ngào','Man mác buồn','Buồn ngủ'])]:
+            ('e756b8e4-b606-4e15-99b1-3f9c6a1b2317','Mao — Nữ · Tự nhiên, mềm, hội thoại đời thường',888753760,['Tự nhiên','Đời thường','Ngọt ngào','Điềm tĩnh','Trêu đùa','Man mác buồn']),
+            ('5680ac39-43c9-487a-bc3e-018c0d29cc38','Kohaku — Nữ · Nhẹ, ngọt, thư giãn',1878365376,['Tự nhiên','Ngọt ngào','Man mác buồn','Buồn ngủ'])]:
             voices.append(VoiceInfo('aivis:'+uid,name,'Japanese','Aivis',uid,base,tuple(dict(id=base+i,name=s) for i,s in enumerate(styles)),
                 'ACML-1.0 • Thương mại có điều kiện',LICENSE_URL))
         return LocalVoicevoxBackend('Aivis',10103,voices,self.engine.start)
