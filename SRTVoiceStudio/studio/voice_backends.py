@@ -45,8 +45,12 @@ class KokoroBackend(Backend):
     def preview(self,language,voice,cancel):return self.synthesize(PREVIEW[language],language,voice,cancel)
 
 class LocalVoicevoxBackend:
-    """VOICEVOX-compatible *local* engine, including Aivis; never cloud requests.
-    Engine startup/model installation is owned by the pack manager.
+    """VOICEVOX-compatible local engine, including Aivis; never cloud requests.
+
+    Aivis generates public API speaker IDs when models are loaded. New optional
+    models therefore use style_id=-1 and are resolved against /speakers by
+    speaker UUID + manifest style name. Older pinned voices keep their verified
+    numeric IDs and remain fully backward compatible.
     """
     def __init__(self,engine,port,voices=(),ensure_started=None):
         self.engine=engine
@@ -72,13 +76,33 @@ class LocalVoicevoxBackend:
         v=self.voices[voice];return dict(license=v.license,source=v.source)
     def synthesize(self,text,language,voice,cancel,progress=lambda _:None):
         return self.synthesize_style(text,language,voice,None,cancel,progress)
+    def resolve_style_id(self,v,style,cancel):
+        """Resolve a local manifest style to the runtime Aivis speaker ID."""
+        if v.style_id>=0:return v.style_id if style is None else style
+        local_id=0 if style is None else style
+        if type(local_id) is not int or local_id not in {s['id'] for s in v.styles}:
+            raise ValueError('Phong cách bản địa không thuộc giọng đã chọn.')
+        expected=next((s for s in v.styles if s['id']==local_id),None)
+        if expected is None:raise ValueError('Không tìm thấy phong cách bản địa.')
+        speakers=json.loads(self.request('/speakers',cancel))
+        if not isinstance(speakers,list):raise RuntimeError('Engine trả danh sách giọng không hợp lệ.')
+        speaker=next((s for s in speakers if s.get('speaker_uuid')==v.speaker_uuid),None)
+        if speaker is None:raise RuntimeError('Engine chưa nạp giọng đã chọn. Hãy cập nhật lại gói giọng Nhật.')
+        runtime_styles=speaker.get('styles',[])
+        source_name=expected.get('source_name',expected.get('name'))
+        resolved=next((s.get('id') for s in runtime_styles if s.get('name')==source_name and isinstance(s.get('id'),int)),None)
+        if resolved is None and 0<=local_id<len(runtime_styles):
+            fallback=runtime_styles[local_id].get('id')
+            if isinstance(fallback,int):resolved=fallback
+        if resolved is None:raise RuntimeError('Không ánh xạ được phong cách của giọng Aivis.')
+        return resolved
     def synthesize_style(self,text,language,voice,style,cancel,progress=lambda _:None):
         v=self.voices.get(voice)
         if v is None or language!=v.language:raise ValueError('Giọng không khớp ngôn ngữ hoặc chưa được cài.')
-        style_id=v.style_id if style is None else style
         if style is not None and (type(style) is not int or style not in {s['id'] for s in v.styles}):
             raise ValueError('Phong cách bản địa không thuộc giọng đã chọn.')
         if self.ensure_started:self.ensure_started(cancel,progress)
+        style_id=self.resolve_style_id(v,style,cancel)
         query=json.loads(self.request('/audio_query',cancel,params={'text':text,'speaker':style_id}))
         query.update(speedScale=1.0,outputSamplingRate=48000,outputStereo=False)
         raw=self.request('/synthesis',cancel,query,{'speaker':style_id})
@@ -106,8 +130,7 @@ class BackendRouter:
         if engine.engine=='Kokoro':raise ValueError('Không thay thế backend Kokoro gốc.')
         self.routes={v:e for v,e in self.routes.items() if e!=engine.engine}
         self.engines[engine.engine]=engine
-        for voice in voices:
-            self.routes[voice.id]=engine.engine
+        for voice in voices:self.routes[voice.id]=engine.engine
     def synthesize(self,text,language,voice,cancel,progress=lambda _:None):
         if voice not in self.routes:raise ValueError('Giọng chưa được cài.')
         return self.engines[self.routes[voice]].synthesize(text,language,voice,cancel,progress)
