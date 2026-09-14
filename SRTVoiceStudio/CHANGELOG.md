@@ -1,3 +1,12 @@
+# 1.2.0 — ứng viên nghiệm thu
+
+- Xử lý SRT hàng loạt, cấu hình riêng, hủy/thử lại và tên đầu ra tránh ghi đè.
+- Underfill V2 dùng chung với C Preview và render; giữ START, giới hạn 0,88–1,20×.
+- Gói Aivis tùy chọn có checksum, Mao/Kohaku và phong cách bản địa.
+- Thư viện giọng, yêu thích, bảng điểm nghe có trọng số và bộ nghe thử A/C.
+- Nâng cấp tại chỗ từ 1.1.0, bảo toàn dữ liệu người dùng.
+- Chưa tự chứng nhận chất lượng nghe hoặc FINAL VERIFIED.
+
 # SRT Voice Studio 1.1.0
 
 - Added 12 local Emotion / Performance presets with three intensities. Natural stays clean. Whisper-like is DSP, not a native whisper model.

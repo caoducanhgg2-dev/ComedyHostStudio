@@ -84,6 +84,10 @@ def run_test(name):
             elif name=='underfill-v2':
                 from .underfill_v2_checks import run_comparison
                 result=run_comparison(Backend(),cancel,root()/'samples/EN7_American_Comedy_Review.srt',folder)
+                import shutil
+                evidence=data_dir()/'UnderfillV2';evidence.mkdir(exist_ok=True)
+                destination=evidence/'EN7_American_Comedy_Review_Voice.mp3'
+                shutil.copyfile(result['output'],destination);result['output']=str(destination)
             elif name=='install-voice':
                 p=AivisPack();p.install(cancel);result=dict(installed=p.available())
             elif name=='optional-voices':result=optional_test(folder,cancel)

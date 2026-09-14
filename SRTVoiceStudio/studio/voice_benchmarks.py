@@ -34,7 +34,7 @@ TEXTS={
   ('numbers','九月二十一日、田中さんは十二個の道具を用意しました。'),
   ('punctuation','本当に？ここに窓を？なるほど、明るくなりますね！')]
 }
-WEIGHTS={'naturalness':35,'pronunciation':25,'expression':15,'speed_fit':10,'audio_quality':10,'popularity':5}
+from .ratings import WEIGHTS
 
 def generate(folder,cancel):
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)

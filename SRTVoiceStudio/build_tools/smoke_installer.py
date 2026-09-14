@@ -11,7 +11,9 @@ import winreg
 
 root=Path(__file__).resolve().parents[1]
 installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.2.0.exe'
-baseline=root/'baseline-installer'/'SRTVoiceStudio_Setup_1.1.0.exe'
+baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.1.0.exe'))
+assert len(baselines)==1, f'Expected one baseline installer, found: {baselines}'
+baseline=baselines[0]
 expected='02d2cc3ef9876608713a8a43e7f795ba30051800c4e9b9de207f209195d4f2a7'
 with baseline.open('rb') as stream:
     assert hashlib.file_digest(stream,'sha256').hexdigest()==expected,'Baseline installer checksum mismatch'

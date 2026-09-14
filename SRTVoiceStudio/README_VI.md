@@ -1,81 +1,36 @@
-# SRT Voice Studio 1.1.0
+# SRT Voice Studio 1.2.0
 
-Nâng cấp trực tiếp từ bản 1.0.0: giữ Kokoro/ONNX, âm vị tiếng Nhật, 20 giọng Mỹ,
-5 giọng Nhật và mốc SRT cố định. Một MP3 mono 48 kHz / 192 kbps duy nhất.
-Không cần API, mạng, Python, FFmpeg hay CUDA trên máy người dùng.
+Nâng cấp từ 1.1.0, giữ nền Kokoro và mốc START của SRT. Mỗi SRT tạo một MP3 48 kHz, 192 kbps. Giao diện tiếng Việt gồm tạo MP3, xử lý hàng loạt và thư viện giọng.
 
-## Sử dụng
+## Tạo MP3 và nghe thử
 
-1. Chọn hoặc kéo thả SRT UTF-8/UTF-8 BOM.
-2. Chọn ngôn ngữ và giọng đọc. Tên thân thiện được ánh xạ tới đúng mã giọng cũ.
-3. Tùy chọn cảm xúc và hiệu ứng. Mặc định Thủ công / Tự nhiên / Không hiệu ứng.
-4. Nghe A (giọng gốc), B (cùng giọng gốc qua xử lý), hoặc chọn câu SRT rồi nghe C
-   (âm thanh sau căn thời gian, cắt và cân bằng âm lượng, dùng chung hàm với bản xuất).
-5. Bấm TẠO MP3. Tên đề xuất: TênSRT_Voice.mp3.
+1. Chọn SRT, ngôn ngữ, giọng và thư mục kết quả.
+2. Chọn cảm xúc, hiệu ứng và mức độ nếu cần. Các xử lý này chạy sau TTS; phong cách bản địa của Aivis chạy trong bộ tạo giọng.
+3. Nghe A — giọng gốc, B — đã xử lý, C — đã khớp timeline. C dùng cùng bộ khớp thời gian với xuất MP3.
+4. Bấm TẠO MP3. Mở báo cáo để xem tốc độ, khoảng lặng, số câu cắt và kiểm tra chồng tiếng.
 
-Giao diện tiếng Việt, hai cột màu navy. Cấu hình ở trái, nghe thử và chọn câu ở phải.
-Vùng nội dung có thể cuộn trên màn hình nhỏ; nút tạo, hủy và khu vực kết quả luôn hiện.
+Không ghi đè đầu ra đã có: ứng dụng chọn tên mới. START không dịch chuyển để giảm khoảng lặng. MP3 được mã hóa một lần từ master PCM.
 
-## Căn câu ngắn và dài
+## Khớp thời gian Underfill V2
 
-Khi bật **Tự căn câu ngắn / dài**, app đo audio sau cảm xúc và hiệu ứng:
+Thời lượng được đo sau cảm xúc và hiệu ứng. Câu ngắn được làm chậm nhẹ, giới hạn thấp nhất 0,88×; câu dài được tăng tốc, ưu tiên tối đa 1,15× và giới hạn cứng 1,20×. Safe Trim xử lý phần quá dài nếu bật. Mục tiêu khoảng lặng cuối slot là khoảng 0,15 giây khi giới hạn tốc độ cho phép. Câu vẫn ngắn khi đã chạm giới hạn được giữ khoảng lặng còn lại, không tiếp tục kéo chậm.
 
-- Câu ngắn: giảm tốc nhẹ để nhắm khoảng lặng cuối khung 0,20 giây.
-- Tốc độ tổng (người dùng × cảm xúc × căn thời gian) không dưới 0,88× và không quá 1,20×.
-- Câu dài: ưu tiên tăng tới 1,15×, tối đa 1,20×; nếu vẫn quá dài thì cắt an toàn
-  và làm nhỏ dần 5 ms cuối, hoặc dừng/báo lỗi theo lựa chọn.
-- Không dịch START của bất kỳ câu nào. Không kéo câu sau lên trước.
-- Nếu còn dư hơn 0,40 giây, app báo **LỜI THOẠI NGẮN / CHƯA LẤP ĐẦY KHUNG**.
-  Đây là cảnh báo độ phủ lời thoại, không phải lỗi chồng tiếng.
-- Ví dụ 2,80 giây / 0,88 = khoảng 3,18 giây: trong khung 4 giây vẫn còn khoảng
-  0,82 giây im lặng. App chấp nhận khoảng dư này để giữ giới hạn tốc độ.
+Cảnh báo V2 xuất hiện khi khoảng lặng còn trên 0,80 giây sau mức chậm tối thiểu. Báo cáo có trung bình, trung vị, tối đa, số câu tăng/giảm tốc, cắt, thiếu thời lượng và overlap. Khoảng lặng theo độ dài PCM không đồng nghĩa hoàn toàn với khoảng lặng cảm nhận khi nghe.
 
-“Im lặng cuối khung” là khoảng từ cuối audio đã căn đến mốc kết thúc cho phép,
-không bao gồm gap SRT tiếp theo. Mục tiêu 0,20 giây không được bảo đảm cho script quá ngắn.
-Báo cáo có trung bình/lớn nhất, câu chưa lấp đầy, câu ở giới hạn 0,88×, tăng/giảm tốc,
-cắt và chồng tiếng. Tăng/giảm tốc được đếm so với tốc độ người dùng cộng preset trước căn.
-Tắt tự căn để giữ tốc độ đã chọn; cảnh báo thiếu lời thoại vẫn hiển thị.
+## Xử lý hàng loạt
 
-## Cảm xúc và hiệu ứng
+Thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hay cấu hình riêng từng tệp. Hàng đợi xử lý tuần tự trong luồng nền. Có thể hủy câu việc hiện tại hoặc cả hàng đợi, thử lại mục lỗi/hủy. Một tệp lỗi không ngăn các mục sau chạy. Mỗi SRT có MP3 và kết quả riêng.
 
-12 preset cảm xúc với 3 mức độ; 16 lựa chọn hiệu ứng (tính cả Không hiệu ứng) với 3 mức độ.
-Kokoro không có tham số emotion native. Đây là xử lý pitch/EQ/dynamics/tempo local.
-“Mô phỏng thì thầm” không phải một model thì thầm thật.
-Tự động chọn cảm xúc dùng quy tắc từ khóa/dấu câu riêng cho Anh và Nhật, không sửa SRT.
-Chế độ Tự động bỏ qua lựa chọn cảm xúc thủ công và tự chọn cho từng câu.
+## Giọng và gói tùy chọn
 
-Echo/vang phòng/vang hang động chạy **trước** khi đo và căn khung.
-Đuôi vang không được phép vượt mốc. Tự nhiên + Không hiệu ứng không áp thêm màu giọng;
-việc căn câu ngắn vẫn hoạt động khi bật tự căn.
+Giữ 25 giọng Kokoro gốc. Bộ lọc gồm đã cài, Anh, Nhật, tất cả, yêu thích và đề xuất. Phong cách bản địa không tính là giọng mới.
 
-A được lưu trong RAM theo ngôn ngữ/giọng/nội dung. Đổi style chỉ tính lại B/C.
-Nghe thử dùng QMediaPlayer với bộ đệm WAV trong RAM, không tạo file nghe thử.
-Thay giọng/nội dung, tạo xong hoặc đóng app sẽ giải phóng bộ đệm.
-Không xuất WAV, MP3 từng câu, A/B/C riêng hay báo cáo cạnh MP3.
+Gói thử nghiệm Aivis thêm Mao và Kohaku với nhiều phong cách bản địa. Lần cài đầu cần mạng và tải khoảng 1,38 GB; sau cài đủ và kiểm tra checksum, gói dùng cục bộ. Gói lớn được lưu riêng với bộ cài chính. Đọc điều kiện ACML trước khi cài: giấy phép có hạn chế nội dung, không phải mọi tình huống thương mại đều được phép. Xem VOICE_RESEARCH_1.2.md và third_party/NOTICE.md.
 
-## Cài đặt và kiểm thử
+Giọng chưa có đánh giá nghe không được gán điểm giả. Bộ nghe thử có A_original.mp3, C_final.mp3, index.html và ratings.csv. Điền sáu điểm 0–10 và người chấm rồi dùng “Nạp điểm nghe từ ratings.csv”. Trọng số: tự nhiên 35%, phát âm 25%, biểu cảm 15%, khớp tốc độ 10%, chất lượng âm thanh 10%, độ phổ biến 5%. Bộ lọc đề xuất dùng điểm nhập đạt từ 8/10; đây là đánh giá do người dùng cung cấp.
 
-SRTVoiceStudio_Setup_1.1.0.exe giữ AppId `{68F0C1C1-17CB-4CED-8261-5C18EB92571A}`,
-nâng cấp vào đúng thư mục bản 1.0.0. Có shortcut và trình gỡ cài.
-Xem AUDIT_1.0.md, CHANGELOG.md, TEST_REPORT.md và acceptance.json của đúng build.
+## Nâng cấp
 
-Workflow chính ở `.github/workflows/srt-voice-studio-windows.yml` trong root repository.
-Windows runner dùng Python 3.12.10, dependency lock cũ, model và FFmpeg đi kèm.
-Chỉ công bố installer khi unit/DSP, frozen EXE, nâng cấp/cài mới, A/B/C, 74 câu Anh + Nhật,
-EN7 30 câu với Underfill, Unicode và gỡ cài đều đạt.
+Chạy SRTVoiceStudio_Setup_1.2.0.exe. Bộ cài dùng cùng AppId để nhận vị trí cài 1.1.0, giữ tùy chọn và gói giọng trong dữ liệu người dùng. Không cần tìm một source 1.2.0 có sẵn.
 
-Bài so sánh EN7 dùng cùng 30 audio Kokoro gốc cho renderer 1.0 được lưu nguyên trạng
-và renderer mới. `acceptance_baseline_1_0.py` chỉ phục vụ benchmark này; giao diện,
-Preview C và xuất bản mới đều dùng `fitting.py` duy nhất.
-
-Kết quả Windows runner không thay thế kiểm tra bằng tai và nghiệm thu trên máy
-Windows 10/11 cụ thể của người dùng. Hiệu quả cảm xúc là DSP, có giới hạn tự nhiên.
-
-## Nâng cấp 1.2.0 — ứng viên đang kiểm thử
-
-- Tab **Hàng đợi xử lý**: thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hoặc sửa từng hàng, hủy một/toàn bộ, thử lại tệp lỗi. Một tệp lỗi không dừng các tệp sau. Mỗi SRT xuất một MP3; tên trùng được thêm số.
-- Tab **Thư viện giọng**: lọc Anh/Nhật/đã cài/yêu thích. Chọn Dùng giọng này để trở về cấu hình và nghe A/B/C.
-- Gói Aivis tải tùy chọn khoảng 1,4 GB; cần mạng khi cài lần đầu, sau đó tổng hợp trên máy. Đọc điều kiện ACML trước khi tải. Các phong cách bản địa nằm dưới cùng một giọng; đổi phong cách làm mới A, B, C.
-- Menu **Cấu hình** lưu/nạp tùy chọn. Dữ liệu và voice pack nằm ngoài thư mục cài để giữ qua nâng cấp.
-- Underfill V2 đo sau cảm xúc/hiệu ứng, giữ START và giới hạn 0.88–1.20x. Khoảng lặng còn lại trên 0,80 giây ở tốc độ tối thiểu hiện cảnh báo, không đổi thành lỗi overlap.
-- Không có điểm chất lượng cảm nhận tự tạo. Xem VOICE_RESEARCH_1.2.md và bộ nghe thử trước khi coi một giọng là đề xuất.
+Bản phát hành chỉ được gắn FINAL VERIFIED sau khi các bước nghiệm thu tương ứng hoàn tất. Test timeline và cài đặt không thay thế việc nghe xác nhận độ tự nhiên.
