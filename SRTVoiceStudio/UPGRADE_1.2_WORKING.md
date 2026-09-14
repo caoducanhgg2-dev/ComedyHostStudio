@@ -1,38 +1,14 @@
-# SRT Voice Studio 1.2 — working checkpoint, not a verified release
+# SRT Voice Studio 1.2.0 — trạng thái đang nghiệm thu
 
-The baseline remains the verified 1.1.0 source (`33fea46`) and installer. The
-current working branch is `srt-voice-studio/1.2.0`. Installer metadata now targets 1.2.0; Windows acceptance is running. No final verification is asserted.
+Baseline: source và installer 1.1.0 đã xác minh, commit `33fea46f83c3ab360ece2567915412037b5ecbf3`. Mọi phần nâng cấp được tiếp tục trên nhánh `srt-voice-studio/1.2.0`.
 
-Implemented in the working source:
+Source đang được build/kiểm thử Windows: `8000defcbb2d35367ed72e57918c19dbe153be57`.
+Lượt chạy: https://github.com/caoducanhgg2-dev/ComedyHostStudio/actions/runs/34819873200
 
-- Sequential background batch queue, common/per-file settings, cancellation,
-  retry, unique output names, Unicode paths, and one MP3 per successful SRT.
-- Explicit configuration save/load and persistent favorite voices.
-- Voice catalogue with installed/English/Japanese/all/favorites filters. The
-  recommended filter is intentionally empty until listening ratings exist.
-- Backend router preserving the original Kokoro implementation, plus a local
-  VOICEVOX-compatible PCM adapter. External engines are not registered in the
-  production UI yet. Native-style selection is still pending.
-- Optional pack installation primitives: fixed SHA-256/size, staging, retry,
-  cancellation cleanup, version isolation, archive path validation, and local
-  integrity validation. Download controls and curated manifests are pending.
-- Underfill V2 classifies measured B before extra user speed, targets 0.15 s
-  residual where reachable, keeps the 0.88 floor and 1.20 ceiling, and warns
-  above 0.80 s at the hard floor. START/slot calculation is unchanged.
-- Median trailing silence and transitions above 0.80 s in render reports.
-- A controlled 46-caption EN7 comparator using the exact archived 1.1 fitting
-  implementation and identical cached original TTS. One final MP3 is emitted.
+Đã triển khai: hàng đợi nền tuần tự, cấu hình chung/riêng, hủy/thử lại, đầu ra tránh ghi đè, lưu cấu hình và yêu thích; router giữ Kokoro, gói Aivis tùy chọn có checksum và tải theo yêu cầu, Mao/Kohaku và phong cách bản địa; thư viện giọng tiếng Việt và nhập CSV điểm nghe có trọng số; Underfill V2, C Preview và render dùng chung fitting, START khóa tuyệt đối; comparator EN7 thực tế 46 caption và bộ nghe thử tám loại nội dung Anh/Nhật.
 
-Local validation on 2026-09-10:
+Ngày 14/09/2026, 101 test source đạt trong 372,50 giây. Kiểm tra thao tác nhập CSV và bộ lọc đề xuất trong GUI cũng đạt với dữ liệu thử tạm, không lưu điểm giả vào giọng thật. Windows đã vượt qua test, đóng gói frozen app, self-test và tạo installer. Kiểm tra nâng cấp/cài sạch/offline/render thực tế đang chạy.
 
-- Full collected suite: **96 passed in 129.31 s**. This includes prior tests,
-  batch, API contract, pack installation and catalogue checks.
-- Subsequently added actual 46-caption SRT structure / synthetic PCM test:
-  **1 passed in 14.02 s**. This is timing evidence, not real speech quality.
-- Actual speech benchmark and Windows upgrade/frozen/offline regression remain
-  required. No naturalness score or final-verification status is asserted.
+Lỗi nghiệm thu ở lượt trước: đường dẫn baseline không tính thư mục lồng bên trong artifact. Đã sửa tìm đúng một installer theo tên, vẫn kiểm SHA-256 chính xác trước cài.
 
-Remaining release gates: real Kokoro EN7 comparison, candidate EN/JP listening
-samples and license audit, curated pack/user interface integration, native
-styles, installed offline tests, 74-caption stress, Windows in-place upgrade
-from the verified 1.1 installer, and final installer/checksum/report delivery.
+Chưa FINAL VERIFIED. Cần kết quả nghiệm thu Windows, installer/checksum/report và bộ nghe thử. Không tự chứng nhận độ tự nhiên hoặc tuyển đủ số lượng giọng đạt chất lượng khi chưa có điểm nghe. Phong cách bản địa không được tính thành giọng mới.
