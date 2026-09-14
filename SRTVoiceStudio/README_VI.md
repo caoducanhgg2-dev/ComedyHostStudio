@@ -1,6 +1,6 @@
-# SRT Voice Studio 1.3.0
+# SRT Voice Studio 1.3.1
 
-Nâng cấp từ 1.2.0, giữ nguyên engine timeline/Underfill V2 và bổ sung **8 giọng British English Kokoro** chạy local/offline. Mỗi SRT tạo một MP3 48 kHz, 192 kbps. Giao diện tiếng Việt gồm tạo MP3, xử lý hàng loạt và thư viện giọng.
+Bản 1.3.1 giữ nguyên engine timeline/Underfill V2 và bộ giọng của 1.3.0, nhưng đổi cơ chế phát hành cập nhật: **không chạy lại bộ cài EXE**. Từ nền 1.3.0, bản cập nhật được đóng thành **ZIP delta chỉ chứa các file thay đổi**.
 
 ## Tạo MP3 và nghe thử
 
@@ -22,26 +22,38 @@ Cảnh báo V2 xuất hiện khi khoảng lặng còn trên 0,80 giây sau mức
 
 Thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hay cấu hình riêng từng tệp. Hàng đợi xử lý tuần tự trong luồng nền. Có thể hủy công việc hiện tại hoặc cả hàng đợi, thử lại mục lỗi/hủy. Một tệp lỗi không ngăn các mục sau chạy. Mỗi SRT có MP3 và kết quả riêng.
 
-## Thư viện giọng 1.3
+## Thư viện giọng
 
 Kokoro tích hợp sẵn có **33 speaker thật**:
 
-- 20 giọng English US giữ nguyên từ 1.2.
-- 8 giọng English UK mới: `bf_alice`, `bf_emma`, `bf_isabella`, `bf_lily`, `bm_daniel`, `bm_fable`, `bm_george`, `bm_lewis`.
-- 5 giọng Japanese giữ nguyên.
+- 20 giọng English US.
+- 8 giọng English UK: `bf_alice`, `bf_emma`, `bf_isabella`, `bf_lily`, `bm_daniel`, `bm_fable`, `bm_george`, `bm_lewis`.
+- 5 giọng Japanese.
 
-Các giọng UK dùng chung model Kokoro/ONNX và `voices-v1.0.bin`, nên không cần tải engine mới và không làm thay đổi pipeline offline. Backend dùng `en-gb` cho British English và chặn chọn nhầm voice US/UK chéo vùng.
+Các giọng UK dùng chung model Kokoro/ONNX và `voices-v1.0.bin`, nên không cần tải engine mới. Backend dùng `en-gb` cho British English và chặn chọn nhầm voice US/UK chéo vùng.
 
 Gói thử nghiệm Aivis vẫn thêm Mao và Kohaku với nhiều phong cách bản địa. Khi Aivis đã cài, thư viện có tối thiểu 35 speaker (không tính style thành giọng mới). Lần cài Aivis đầu cần mạng và tải khoảng 1,38 GB; sau cài đủ và kiểm tra checksum, gói dùng cục bộ. Nếu Aivis đã có model khác phiên bản, ứng dụng giữ nguyên và báo xung đột thay vì ghi đè. Đọc điều kiện ACML trước khi dùng.
 
-Piper LJSpeech High vẫn là ứng viên nghiên cứu, chưa được đóng gói trong 1.3.0. Piper engine hiện dùng GPLv3 nên cần tách rõ nghĩa vụ phân phối/runtime trước khi đưa vào installer; không thêm chỉ để tăng số lượng giọng.
+Piper LJSpeech High vẫn là ứng viên nghiên cứu, chưa được đóng gói. Piper engine hiện dùng GPLv3 nên cần tách rõ nghĩa vụ phân phối/runtime trước khi đưa vào bản phát hành.
 
 ## Đánh giá nghe
 
-Giọng chưa có đánh giá nghe không được gán điểm giả. Bộ Voice Auditions 1.3 tạo A_original.mp3 và C_final.mp3 cho cả US/UK/JP/Aivis, cùng `index.html`, `benchmark.json` và `ratings.csv`. Trọng số: tự nhiên 35%, phát âm 25%, biểu cảm 15%, khớp tốc độ 10%, chất lượng âm thanh 10%, độ phổ biến 5%. Bộ lọc Đề xuất chỉ dùng điểm người dùng nhập đạt từ 8/10.
+Giọng chưa có đánh giá nghe không được gán điểm giả. Bộ Voice Auditions tạo A_original.mp3 và C_final.mp3 cho cả US/UK/JP/Aivis, cùng `index.html`, `benchmark.json` và `ratings.csv`. Trọng số: tự nhiên 35%, phát âm 25%, biểu cảm 15%, khớp tốc độ 10%, chất lượng âm thanh 10%, độ phổ biến 5%. Bộ lọc Đề xuất chỉ dùng điểm người dùng nhập đạt từ 8/10.
 
-## Nâng cấp
+## Cập nhật bằng ZIP — không chạy lại installer EXE
 
-Chạy `SRTVoiceStudio_Setup_1.3.0.exe`. Bộ cài dùng cùng AppId để nhận vị trí cài 1.2.0 và giữ cấu hình, Favorites cùng các gói giọng trong dữ liệu người dùng.
+Bản cài đầy đủ 1.3.0 chỉ dùng làm **nền ban đầu**. Từ 1.3.1, cập nhật theo dạng:
 
-Nghiệm thu 1.3 yêu cầu: 8 giọng British phải tạo audio thật offline, self-test/clean install/upgrade phải đạt, voice benchmark phải có ít nhất 35 speaker khi Aivis được cài và timeline vẫn overlap = 0. Chất lượng cảm nhận vẫn cần người dùng nghe chấm trước khi gắn nhãn Recommended.
+`SRTVoiceStudio_Update_1.3.0_to_1.3.1.zip`
+
+Cách dùng:
+
+1. Giải nén ZIP ra một thư mục tạm bất kỳ.
+2. Đóng SRT Voice Studio.
+3. Chạy `Apply_Update.cmd`.
+4. Script tự tìm thư mục cài từ Windows, kiểm tra đúng phiên bản nền và SHA-256 từng file trước khi ghi đè.
+5. Chỉ các file thay đổi mới được thay thế; dữ liệu trong `%LOCALAPPDATA%\SRTVoiceStudio` được giữ nguyên.
+6. Nếu checksum nền không đúng, updater dừng trước khi ghi file. Nếu lỗi trong lúc cập nhật, các file đã thay được rollback từ bản sao tạm.
+7. Sau khi thành công, `DisplayVersion` trong Windows được cập nhật lên 1.3.1.
+
+CI phải dựng lại đúng frozen app của commit 1.3.0, so hash với frozen app mới, đóng gói **delta thật**, rồi kiểm tra: kết quả sau patch phải byte-for-byte tương đương build mới, chạy patch lần hai không thay đổi kết quả, và baseline bị sửa phải bị từ chối trước khi ghi đè.
