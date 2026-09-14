@@ -12,14 +12,34 @@ EFFECTS={'None':'Không hiệu ứng','Deep Voice':'Giọng trầm','Bright Voic
 OVERFLOWS={'Safe Trim':'Cắt an toàn','Stop and Report':'Dừng và báo lỗi'}
 PREVIEW_LABELS={'A':'A · Giọng gốc','B':'B · Đã xử lý','C':'C · Theo mốc SRT'}
 
+# Mô tả định hướng để người dùng chọn nhanh. Đây không phải điểm chất lượng
+# và không thay thế đánh giá nghe thực tế trong ratings.csv.
+VOICE_CHARACTERISTICS={
+    'jf_alpha':'Sáng, trẻ trung, linh hoạt',
+    'jf_gongitsune':'Mềm, dịu, hợp kể chuyện',
+    'jf_nezumi':'Nhẹ, đáng yêu, thiên hoạt hình',
+    'jf_tebukuro':'Ấm, điềm tĩnh, tự nhiên',
+    'jm_kumo':'Trầm vừa, bình tĩnh, hợp thuyết minh',
+    'aivis:e756b8e4-b606-4e15-99b1-3f9c6a1b2317':'Tự nhiên, mềm, hội thoại đời thường',
+    'aivis:5680ac39-43c9-487a-bc3e-018c0d29cc38':'Nhẹ, ngọt, thư giãn',
+    'am_onyx':'Trầm, kể chuyện',
+}
+
 def voice_label(voice):
     if not isinstance(voice,str):return 'Chưa chọn giọng'
     if len(voice)<4 or voice[:3] not in ('af_','am_','bf_','bm_','jf_','jm_'):return voice
     name=voice.split('_',1)[1].replace('_',' ').title()
     gender='Nữ' if voice[1]=='f' else 'Nam'
     region=' · Anh' if voice[0]=='b' else ''
-    if voice=='am_onyx':return 'Onyx — Nam · Trầm / Kể chuyện'
     return f'{name} — {gender}{region}'
+
+def voice_characteristic(voice):
+    return VOICE_CHARACTERISTICS.get(voice,'') if isinstance(voice,str) else ''
+
+def voice_display_label(voice,fallback=None):
+    base=voice_label(voice) if isinstance(voice,str) and len(voice)>=4 and voice[:3] in ('af_','am_','bf_','bm_','jf_','jm_') else (fallback or voice_label(voice))
+    trait=voice_characteristic(voice)
+    return f'{base} · {trait}' if trait else base
 
 def display(value):
     for mapping in (LANGUAGES,MODES,INTENSITIES,EMOTIONS,EFFECTS,OVERFLOWS):
