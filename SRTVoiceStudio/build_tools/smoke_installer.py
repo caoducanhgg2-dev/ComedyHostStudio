@@ -1,4 +1,4 @@
-"""Clean install and upgrade the exact 1.1 artifact; real offline installed acceptance."""
+"""Clean install and upgrade the exact verified 1.2 artifact; real offline installed acceptance."""
 import os
 import sys
 sys.stdout.reconfigure(encoding='utf-8',errors='replace')
@@ -10,16 +10,16 @@ import hashlib
 import winreg
 
 root=Path(__file__).resolve().parents[1]
-installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.2.0.exe'
-baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.1.0.exe'))
+installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.3.0.exe'
+baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.2.0.exe'))
 assert len(baselines)==1, f'Expected one baseline installer, found: {baselines}'
 baseline=baselines[0]
-expected='02d2cc3ef9876608713a8a43e7f795ba30051800c4e9b9de207f209195d4f2a7'
+expected='48c10cbb68b09e2458d651f6057b592dfdf88c8f6b947425761a41f9a3fbe132'
 with baseline.open('rb') as stream:
     assert hashlib.file_digest(stream,'sha256').hexdigest()==expected,'Baseline installer checksum mismatch'
 appkey=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
 appdata=Path(os.environ['LOCALAPPDATA'])/'SRTVoiceStudio'
-results={'version':'1.2.0','baseline_sha256':expected,'scenarios':{}}
+results={'version':'1.3.0','baseline_sha256':expected,'scenarios':{}}
 
 def registry():
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER,appkey,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:
@@ -33,7 +33,7 @@ def install(file,dest=None):
 def read_report(name):
     data=json.loads((appdata/name).read_text('utf-8'))
     assert data.get('passed') is True,data
-    assert data.get('version')=='1.2.0',data
+    assert data.get('version')=='1.3.0',data
     return data
 
 for scenario in ('upgrade','clean'):
@@ -44,17 +44,17 @@ for scenario in ('upgrade','clean'):
     try:
         if scenario=='upgrade':
             install(baseline,dest)
-            old=registry();assert old['DisplayVersion']=='1.1.0',old
+            old=registry();assert old['DisplayVersion']=='1.2.0',old
             sentinel=appdata/'VoicePacks'/'keep-upgrade.txt';sentinel.parent.mkdir(parents=True,exist_ok=True);sentinel.write_text('preserve user pack')
-            preferences=appdata/'preferences.json';preferences.write_text('{"favorite_voices":["am_michael"]}')
+            preferences=appdata/'preferences.json';preferences.write_text('{"favorite_voices":["am_michael","bf_emma"]}')
             # No /DIR for the upgrade: Inno must find the existing AppId/location.
             install(installer)
             assert sentinel.read_text()=='preserve user pack'
-            assert json.loads(preferences.read_text())['favorite_voices']==['am_michael']
+            assert json.loads(preferences.read_text())['favorite_voices']==['am_michael','bf_emma']
         else:
             install(installer)
         state=registry()
-        assert state['DisplayVersion']=='1.2.0' and state['DisplayName']=='SRT Voice Studio',state
+        assert state['DisplayVersion']=='1.3.0' and state['DisplayName']=='SRT Voice Studio',state
         assert Path(state['InstallLocation']).resolve()==dest.resolve(),state
         assert exe.exists() and len(list(dest.glob('unins*.exe')))==1
         env=os.environ.copy()
@@ -78,6 +78,7 @@ for scenario in ('upgrade','clean'):
             blocked.append(name)
         subprocess.run([str(exe),'--self-test'],env=env,check=True,timeout=1200)
         data=read_report('self-test.json')
+        assert data.get('all_british_voices',{}).get('count')==8,data.get('all_british_voices')
         subprocess.run([str(exe),'--ui-smoke'],env=env,check=True,timeout=240)
         data['ui']=read_report('ui-test.json')
         if scenario=='upgrade':
@@ -88,8 +89,9 @@ for scenario in ('upgrade','clean'):
             subprocess.run([str(exe),'--underfill-test'],env=env,check=True,timeout=900)
             data['real_30_caption_underfill']=read_report('underfill-test.json')
             for check in ('underfill-v2','batch','voice-benchmark'):
-                subprocess.run([str(exe),'--'+check+'-test'],env=env,check=True,timeout=1200)
+                subprocess.run([str(exe),'--'+check+'-test'],env=env,check=True,timeout=1800)
                 data[check]=read_report(check+'-test.json')
+            assert data['voice-benchmark']['voices']>=35,data['voice-benchmark']
         assert not list((appdata/'Temp').glob('job-*')),'Temporary audio remains: '+repr([str(p) for p in (appdata/'Temp').glob('job-*')])
         data['registry']=state
         results['scenarios'][scenario]=data
