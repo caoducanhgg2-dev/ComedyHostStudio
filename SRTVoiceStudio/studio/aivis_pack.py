@@ -2,8 +2,8 @@
 import json
 import os
 from pathlib import Path
-import shutil
 import tempfile
+import hashlib
 from .audio import check_cancel
 from .paths import data_dir
 from .voice_packs import Pack,PackManager
@@ -18,6 +18,38 @@ LICENSE_NOTICE=('Mao và Kohaku: chưa có điểm nghe xác nhận. ACML 1.0 ch
     'cấm mạo danh, lừa dối, công kích hoặc phê phán cá nhân, tổ chức hay sản phẩm có thật, cùng các giới hạn khác. '
     'Đọc điều khoản đầy đủ trước khi dùng cho nội dung review/comedy. Ghi nguồn gợi ý: AivisSpeech: まお / コハク. '
     'Engine LGPL-3.0; BERT của tsukumijima/ku-nlp: CC-BY-SA-4.0. Tải khoảng 1,4 GB một lần; cần thêm dung lượng giải nén.')
+
+def engine_data_root():
+    # Aivis 1.2 uses platformdirs(..., roaming=True). On Windows its shell
+    # lookup ignores APPDATA overrides: resolve the same known folder.
+    import ctypes
+    buffer=ctypes.create_unicode_buffer(32768)
+    status=ctypes.windll.shell32.SHGetFolderPathW(None,26,None,0,buffer)
+    if status!=0:raise RuntimeError('Không xác định được thư mục dữ liệu Aivis của Windows.')
+    return Path(buffer.value)/'AivisSpeech-Engine'
+
+def install_shared_file(source,destination,expected,cancel):
+    """Publish verified bytes without replacing another Aivis user's model."""
+    def matches(path):
+        digest=hashlib.sha256()
+        with path.open('rb') as stream:
+            while chunk:=stream.read(1024*1024):check_cancel(cancel);digest.update(chunk)
+        return digest.hexdigest()==expected
+    destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
+    if destination.exists():
+        if matches(destination):return
+        raise RuntimeError('Aivis đã có tệp khác phiên bản; giữ nguyên tệp hiện có: '+str(destination))
+    fd,temporary=tempfile.mkstemp(prefix='.srtvs-',dir=destination.parent)
+    temporary=Path(temporary)
+    try:
+        with os.fdopen(fd,'wb') as dst,Path(source).open('rb') as src:
+            while chunk:=src.read(1024*1024):check_cancel(cancel);dst.write(chunk)
+        if not matches(temporary):raise RuntimeError('Tệp model thay đổi trong khi cài.')
+        check_cancel(cancel)
+        try:os.link(temporary,destination)
+        except FileExistsError:
+            if not matches(destination):raise RuntimeError('Tệp model được ứng dụng khác thay đổi; không ghi đè.')
+    finally:temporary.unlink(missing_ok=True)
 
 def packs():
     result=[Pack('aivis-engine-windows','1.2.0',ENGINE_SOURCE+'/releases/download/1.2.0/AivisSpeech-Engine-Windows-x64-1.2.0.7z.001',
@@ -38,7 +70,11 @@ def packs():
 class AivisPack:
     def __init__(self):
         self.manager=PackManager();self.runtime=data_dir()/'VoicePacks/aivis-runtime/1.2.0';self.engine=None
-    def available(self):return (self.runtime/'ready.json').is_file()
+    def available(self):
+        try:
+            marker=json.loads((self.runtime/'ready.json').read_text('utf-8'))
+            return marker.get('layout')==2 and Path(marker['engine']).is_file() and all(Path(p).is_file() for p in marker['model_files'])
+        except (OSError,ValueError,KeyError,TypeError):return False
     def install(self,cancel,progress=lambda *_:None):
         if os.name!='nt':raise RuntimeError('Gói cài tự động này dành cho Windows x64.')
         files=packs();total=sum(p.size for p in files);done=0;locations=[]
@@ -49,17 +85,18 @@ class AivisPack:
         if self.available():return self.runtime
         executable=locations[0]/'Windows-x64/run.exe'
         if not executable.is_file():raise RuntimeError('Cấu trúc engine không khớp bản đã kiểm tra.')
-        self.runtime.parent.mkdir(parents=True,exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='.prepare-',dir=self.runtime.parent) as temporary:
-            temp=Path(temporary);payload=temp/'payload';data=payload/'data/AivisSpeech-Engine'
-            models=data/'Models';models.mkdir(parents=True)
-            bert=data/'BertModelCaches/models--tsukumijima--deberta-v2-large-japanese-char-wwm-onnx/snapshots'/BERT_REVISION;bert.mkdir(parents=True)
-            for p,location in zip(files[1:],locations[1:]):
-                check_cancel(cancel);destination=(models if p.filename.endswith('.aivmx') else bert)/p.filename
-                with (location/p.filename).open('rb') as src,destination.open('wb') as dst:
-                    while chunk:=src.read(1024*1024):check_cancel(cancel);dst.write(chunk)
-            (payload/'ready.json').write_text(json.dumps({'engine':str(executable),'version':'1.2.0'}),encoding='utf-8')
-            check_cancel(cancel);os.rename(payload,self.runtime)
+        data=engine_data_root();models=data/'Models'
+        bert=data/'BertModelCaches/models--tsukumijima--deberta-v2-large-japanese-char-wwm-onnx/snapshots'/BERT_REVISION
+        installed=[]
+        for p,location in zip(files[1:],locations[1:]):
+            destination=(models if p.filename.endswith('.aivmx') else bert)/p.filename
+            install_shared_file(location/p.filename,destination,p.sha256,cancel)
+            installed.append(str(destination))
+        self.runtime.mkdir(parents=True,exist_ok=True)
+        marker=self.runtime/'ready.tmp'
+        marker.write_text(json.dumps({'engine':str(executable),'version':'1.2.0','layout':2,
+                                     'model_data':str(data),'model_files':installed}),encoding='utf-8')
+        check_cancel(cancel);os.replace(marker,self.runtime/'ready.json')
         return self.runtime
     def backend(self):
         if not self.available():return None

@@ -21,7 +21,8 @@ class LocalEngine:
             try:probe.bind(('127.0.0.1',self.port))
             except OSError:raise RuntimeError('Cổng engine đang được ứng dụng khác sử dụng.')
         self.data.mkdir(parents=True,exist_ok=True)
-        env=dict(os.environ,APPDATA=str(self.data),XDG_DATA_HOME=str(self.data),HF_HUB_OFFLINE='1')
+        env=dict(os.environ,HF_HUB_OFFLINE='1')
+        if os.name!='nt':env['XDG_DATA_HOME']=str(self.data)
         self.log=(self.data/'engine.log').open('ab')
         try:
             self.process=subprocess.Popen([str(self.executable),'--host','127.0.0.1','--port',str(self.port),'--no-use_gpu','--disable_sentry'],

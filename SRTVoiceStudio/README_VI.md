@@ -25,7 +25,7 @@ Thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hay cấu hình ri�
 
 Giữ 25 giọng Kokoro gốc. Bộ lọc gồm đã cài, Anh, Nhật, tất cả, yêu thích và đề xuất. Phong cách bản địa không tính là giọng mới.
 
-Gói thử nghiệm Aivis thêm Mao và Kohaku với nhiều phong cách bản địa. Lần cài đầu cần mạng và tải khoảng 1,38 GB; sau cài đủ và kiểm tra checksum, gói dùng cục bộ. Gói lớn được lưu riêng với bộ cài chính. Đọc điều kiện ACML trước khi cài: giấy phép có hạn chế nội dung, không phải mọi tình huống thương mại đều được phép. Xem VOICE_RESEARCH_1.2.md và third_party/NOTICE.md.
+Gói thử nghiệm Aivis thêm Mao và Kohaku với nhiều phong cách bản địa. Lần cài đầu cần mạng và tải khoảng 1,38 GB; sau cài đủ và kiểm tra checksum, gói dùng cục bộ. Gói lớn được lưu riêng với bộ cài chính. Aivis sử dụng thư mục chuẩn AppData/Roaming/AivisSpeech-Engine cho model và bộ nhớ đệm; nếu đã có tệp khác phiên bản, ứng dụng giữ nguyên và báo xung đột thay vì ghi đè. Đọc điều kiện ACML trước khi cài: giấy phép có hạn chế nội dung, không phải mọi tình huống thương mại đều được phép. Xem VOICE_RESEARCH_1.2.md và third_party/NOTICE.md.
 
 Giọng chưa có đánh giá nghe không được gán điểm giả. Bộ nghe thử có A_original.mp3, C_final.mp3, index.html và ratings.csv. Điền sáu điểm 0–10 và người chấm rồi dùng “Nạp điểm nghe từ ratings.csv”. Trọng số: tự nhiên 35%, phát âm 25%, biểu cảm 15%, khớp tốc độ 10%, chất lượng âm thanh 10%, độ phổ biến 5%. Bộ lọc đề xuất dùng điểm nhập đạt từ 8/10; đây là đánh giá do người dùng cung cấp.
 
