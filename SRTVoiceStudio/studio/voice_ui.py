@@ -57,7 +57,7 @@ class VoicePanel(QWidget):
         for voice in self.voices.values():
             rating=score(self.ratings.get(voice.id))
             if mode=='recommended' and (rating is None or rating<8):continue
-            if mode=='en' and voice.language!='English US':continue
+            if mode=='en' and voice.language not in ('English US','English UK'):continue
             if mode=='ja' and voice.language!='Japanese':continue
             if mode=='favorites' and voice.id not in self.favorites:continue
             label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
