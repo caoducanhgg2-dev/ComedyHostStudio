@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: SRTVoiceStudio
@@ -43,25 +43,25 @@ jobs:
       - name: Build installer
         shell: cmd
         run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
-      - name: Download verified 1.2 installer for upgrade acceptance
+      - name: Download verified 1.3 installer for upgrade acceptance
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Setup_1.2.0
-          run-id: 34822400144
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
           github-token: ${{ github.token }}
           path: SRTVoiceStudio/baseline-installer
-      - name: Test upgrade, clean install, offline A-B-C, British voices, real 74 captions, uninstall
+      - name: Test upgrade, clean install, offline A-B-C, six Aivis Japanese voices, British voices, real 74 captions, uninstall
         run: python build_tools/smoke_installer.py
       - name: Installer checksum
         run: |
-          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup_1.3.0.exe -Algorithm SHA256).Hash
-          "$digest  SRTVoiceStudio_Setup_1.3.0.exe" | Set-Content installer-output/SHA256SUMS.txt
+          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup_1.4.0.exe -Algorithm SHA256).Hash
+          "$digest  SRTVoiceStudio_Setup_1.4.0.exe" | Set-Content installer-output/SHA256SUMS.txt
       - name: Upload verified installer
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_Setup_1.3.0
+          name: SRTVoiceStudio_Setup_1.4.0
           path: |
-            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup_1.3.0.exe
+            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup_1.4.0.exe
             SRTVoiceStudio/installer-output/SHA256SUMS.txt
             SRTVoiceStudio/installer-output/acceptance.json
             SRTVoiceStudio/test-results.xml
@@ -84,21 +84,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_1.3_EN7_MP3
+          name: SRTVoiceStudio_1.4_EN7_MP3
           path: ~/AppData/Local/SRTVoiceStudio/UnderfillV2/
           if-no-files-found: warn
       - name: Upload voice auditions
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_1.3_Voice_Auditions
+          name: SRTVoiceStudio_1.4_Voice_Auditions
           path: ~/AppData/Local/SRTVoiceStudio/VoiceBenchmarks/
           if-no-files-found: warn
       - name: Build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-diagnostics-1.3
+          name: build-diagnostics-1.4
           path: |
             SRTVoiceStudio/test-results.xml
             SRTVoiceStudio/installed-dependencies.txt
