@@ -1,0 +1,100 @@
+name: Publish SRT Voice Studio 1.3.0
+
+on:
+  push:
+    branches: ['publish/srt-voice-studio-1.3.0']
+    paths: ['.github/workflows/publish-srt-voice-studio-1.3.0.yml']
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact tested Windows run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: f0c382929aec77b5a880438560d56a424aa6ce8a
+          TEST_RUN_ID: '34854705948'
+        run: |
+          set -euo pipefail
+          conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TEST_RUN_ID}" --jq '.conclusion')"
+          head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TEST_RUN_ID}" --jq '.head_sha')"
+          test "$conclusion" = "success"
+          test "$head_sha" = "$EXPECTED_SHA"
+          echo "Verified successful Windows acceptance run ${TEST_RUN_ID} for ${EXPECTED_SHA}."
+
+      - name: Download verified installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
+          github-token: ${{ github.token }}
+          path: release-assets
+
+      - name: Verify installer checksum and acceptance payload
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          test -s SRTVoiceStudio_Setup_1.3.0.exe
+          test -s SHA256SUMS.txt
+          test -s acceptance.json
+          test -s test-results.xml
+          test -s filter-validation.json
+          sha256sum -c SHA256SUMS.txt
+          hash="$(awk 'NR==1 {print toupper($1)}' SHA256SUMS.txt)"
+          test "${#hash}" -eq 64
+          echo "sha256=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Publish immutable 1.3.0 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: srt-voice-studio-v1.3.0
+          TARGET_SHA: f0c382929aec77b5a880438560d56a424aa6ce8a
+          TEST_RUN_ID: '34854705948'
+          INSTALLER_SHA256: ${{ steps.verify.outputs.sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          # SRT Voice Studio 1.3.0
+
+          Windows x64 release built and acceptance-tested from commit \`${TARGET_SHA}\`.
+
+          - Upgrade acceptance: 1.2.0 → 1.3.0
+          - Clean install and uninstall acceptance
+          - Offline A/B/C rendering acceptance
+          - 8 British Kokoro voices covered by automated acceptance
+          - Batch workflow and real 74-caption stress acceptance
+          - UI copy updated for English (US / UK) / Japanese
+          - Installer: \`SRTVoiceStudio_Setup_1.3.0.exe\`
+          - SHA-256: \`${INSTALLER_SHA256}\`
+          - Verified Windows workflow run: ${TEST_RUN_ID}
+
+          Voice naturalness remains a listening-quality judgement and is not claimed by automated tests.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET_SHA" --title "SRT Voice Studio 1.3.0" --notes-file release-notes.md
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+              release-assets/SRTVoiceStudio_Setup_1.3.0.exe \
+              release-assets/SHA256SUMS.txt \
+              release-assets/acceptance.json \
+              release-assets/test-results.xml \
+              release-assets/filter-validation.json
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET_SHA" --title "SRT Voice Studio 1.3.0" --notes-file release-notes.md \
+              release-assets/SRTVoiceStudio_Setup_1.3.0.exe \
+              release-assets/SHA256SUMS.txt \
+              release-assets/acceptance.json \
+              release-assets/test-results.xml \
+              release-assets/filter-validation.json
+          fi
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
+          test "$tag_sha" = "$TARGET_SHA"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,tagName,isDraft,isPrerelease
