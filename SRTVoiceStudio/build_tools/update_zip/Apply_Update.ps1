@@ -16,7 +16,20 @@ $Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | Convert
 $RegPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1"
 
 function Get-Sha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $Hash = $Sha.ComputeHash($Stream)
+            return (([System.BitConverter]::ToString($Hash)) -replace "-", "").ToLowerInvariant()
+        }
+        finally {
+            $Sha.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($TargetDir)) {
