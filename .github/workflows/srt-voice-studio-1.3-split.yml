@@ -1,0 +1,136 @@
+name: Package SRT Voice Studio 1.3 Split Downloads
+
+on:
+  push:
+    branches:
+      - packaging/srt-voice-studio-1.3.0-split
+    paths:
+      - .github/workflows/srt-voice-studio-1.3-split.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  split-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified 1.3.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          path: verified
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          run-id: 34854705948
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Split installer into 40 MiB parts and create join tools
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          root = Path('verified')
+          exes = list(root.rglob('SRTVoiceStudio_Setup_1.3.0.exe'))
+          if len(exes) != 1:
+              raise SystemExit(f'Expected exactly one installer, found: {exes}')
+          src = exes[0]
+          out = Path('split')
+          out.mkdir(exist_ok=True)
+          part_size = 40 * 1024 * 1024
+
+          h = hashlib.sha256()
+          size = 0
+          parts = []
+          with src.open('rb') as f:
+              index = 1
+              while True:
+                  chunk = f.read(part_size)
+                  if not chunk:
+                      break
+                  h.update(chunk)
+                  size += len(chunk)
+                  name = f'SRTVoiceStudio_1.3.0.part{index:02d}.bin'
+                  (out / name).write_bytes(chunk)
+                  parts.append((name, len(chunk), hashlib.sha256(chunk).hexdigest().upper()))
+                  index += 1
+
+          if len(parts) != 12:
+              raise SystemExit(f'Expected 12 parts for verified installer, got {len(parts)} (size={size})')
+
+          digest = h.hexdigest().upper()
+          expected = 'F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC'
+          if digest != expected:
+              raise SystemExit(f'Installer SHA mismatch: {digest} != {expected}')
+
+          manifest = {
+              'installer': src.name,
+              'size_bytes': size,
+              'sha256': digest,
+              'part_size_bytes': part_size,
+              'parts': [
+                  {'name': n, 'size_bytes': s, 'sha256': d}
+                  for n, s, d in parts
+              ],
+          }
+          (out / 'SRTVoiceStudio_1.3.0_SPLIT_MANIFEST.json').write_text(
+              json.dumps(manifest, indent=2), encoding='utf-8'
+          )
+
+          names = [n for n, _, _ in parts]
+          copy_expr = '+'.join(f'"{n}"' for n in names)
+          bat = f'''@echo off\r\nchcp 65001 >nul\r\ncd /d "%~dp0"\r\necho Dang ghep SRT Voice Studio 1.3.0...\r\ncopy /b {copy_expr} "SRTVoiceStudio_Setup_1.3.0.exe" >nul\r\nif errorlevel 1 (\r\n  echo [LOI] Khong the ghep file. Kiem tra da du 12 part.\r\n  pause\r\n  exit /b 1\r\n)\r\necho.\r\necho [OK] Da tao SRTVoiceStudio_Setup_1.3.0.exe\r\necho SHA-256 chuan:\r\necho {digest}\r\necho.\r\ncertutil -hashfile "SRTVoiceStudio_Setup_1.3.0.exe" SHA256\r\necho.\r\necho Neu checksum trung voi SHA-256 chuan thi file da ghep chinh xac.\r\npause\r\n'''
+          (out / 'GHEP_SRTVoiceStudio_1.3.0.bat').write_text(bat, encoding='utf-8-sig', newline='')
+
+          guide = f'''SRT Voice Studio 1.3.0 - Huong dan ghep\n\n1. Tai du 12 file part01 -> part12.\n2. Giai nen neu trinh duyet tai tung part duoi dang ZIP artifact.\n3. Dat 12 file .bin va GHEP_SRTVoiceStudio_1.3.0.bat trong cung mot thu muc.\n4. Bam dup file BAT.\n5. File tao ra: SRTVoiceStudio_Setup_1.3.0.exe\n6. SHA-256 chuan: {digest}\n\nKhong doi ten cac file .bin.\n'''
+          (out / 'HUONG_DAN_GHEP_1.3.0.txt').write_text(guide, encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part01, path: split/SRTVoiceStudio_1.3.0.part01.bin, compression-level: 0}
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part02, path: split/SRTVoiceStudio_1.3.0.part02.bin, compression-level: 0}
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part03, path: split/SRTVoiceStudio_1.3.0.part03.bin, compression-level: 0}
+      - name: Upload part 04
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part04, path: split/SRTVoiceStudio_1.3.0.part04.bin, compression-level: 0}
+      - name: Upload part 05
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part05, path: split/SRTVoiceStudio_1.3.0.part05.bin, compression-level: 0}
+      - name: Upload part 06
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part06, path: split/SRTVoiceStudio_1.3.0.part06.bin, compression-level: 0}
+      - name: Upload part 07
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part07, path: split/SRTVoiceStudio_1.3.0.part07.bin, compression-level: 0}
+      - name: Upload part 08
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part08, path: split/SRTVoiceStudio_1.3.0.part08.bin, compression-level: 0}
+      - name: Upload part 09
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part09, path: split/SRTVoiceStudio_1.3.0.part09.bin, compression-level: 0}
+      - name: Upload part 10
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part10, path: split/SRTVoiceStudio_1.3.0.part10.bin, compression-level: 0}
+      - name: Upload part 11
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part11, path: split/SRTVoiceStudio_1.3.0.part11.bin, compression-level: 0}
+      - name: Upload part 12
+        uses: actions/upload-artifact@v4
+        with: {name: SRTVoiceStudio_1.3.0_part12, path: split/SRTVoiceStudio_1.3.0.part12.bin, compression-level: 0}
+
+      - name: Upload join tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.3.0_JOIN_TOOLS
+          path: |
+            split/GHEP_SRTVoiceStudio_1.3.0.bat
+            split/HUONG_DAN_GHEP_1.3.0.txt
+            split/SRTVoiceStudio_1.3.0_SPLIT_MANIFEST.json
+          compression-level: 9
