@@ -25,19 +25,23 @@ VOICE_CHARACTERISTICS={
     'am_onyx':'Trầm, kể chuyện',
 }
 
+def voice_characteristic(voice):
+    return VOICE_CHARACTERISTICS.get(voice,'') if isinstance(voice,str) else ''
+
 def voice_label(voice):
     if not isinstance(voice,str):return 'Chưa chọn giọng'
     if len(voice)<4 or voice[:3] not in ('af_','am_','bf_','bm_','jf_','jm_'):return voice
     name=voice.split('_',1)[1].replace('_',' ').title()
     gender='Nữ' if voice[1]=='f' else 'Nam'
     region=' · Anh' if voice[0]=='b' else ''
-    return f'{name} — {gender}{region}'
-
-def voice_characteristic(voice):
-    return VOICE_CHARACTERISTICS.get(voice,'') if isinstance(voice,str) else ''
+    base=f'{name} — {gender}{region}'
+    trait=voice_characteristic(voice)
+    return f'{base} · {trait}' if trait else base
 
 def voice_display_label(voice,fallback=None):
-    base=voice_label(voice) if isinstance(voice,str) and len(voice)>=4 and voice[:3] in ('af_','am_','bf_','bm_','jf_','jm_') else (fallback or voice_label(voice))
+    if isinstance(voice,str) and len(voice)>=4 and voice[:3] in ('af_','am_','bf_','bm_','jf_','jm_'):
+        return voice_label(voice)
+    base=fallback or voice_label(voice)
     trait=voice_characteristic(voice)
     return f'{base} · {trait}' if trait else base
 
