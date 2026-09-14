@@ -1,4 +1,13 @@
-# SRT Voice Studio 1.3.0 — đang nghiệm thu
+# SRT Voice Studio 1.3.1
+
+- Chuyển cơ chế cập nhật từ chạy lại installer EXE sang **ZIP delta**.
+- Gói cập nhật chỉ chứa file mới/thay đổi so với frozen build 1.3.0; workflow từ chối nếu vô tình đóng gói toàn bộ app.
+- `Apply_Update.cmd` gọi PowerShell updater, tự tìm thư mục cài, yêu cầu đóng app, kiểm tra SHA-256 baseline trước khi ghi đè và cập nhật `DisplayVersion` sau khi thành công.
+- Có rollback file trong phiên cập nhật nếu bước ghi/verify thất bại.
+- CI dựng lại chính xác commit nền 1.3.0, áp ZIP lên bản nền trong thư mục Unicode, kiểm tra kết quả byte-for-byte với build 1.3.1, kiểm tra idempotent và từ chối baseline bị sửa.
+- Không chạy Inno Setup trong luồng phát hành update 1.3.1; installer 1.3.0 giữ vai trò bản cài đầy đủ ban đầu.
+
+# SRT Voice Studio 1.3.0
 
 - Thêm 8 speaker British English Kokoro chạy local/offline: Alice, Emma, Isabella, Lily, Daniel, Fable, George, Lewis.
 - Thêm ngôn ngữ `English UK` / `Tiếng Anh (Anh)` và dùng G2P `en-gb`; voice US/UK không được chọn chéo vùng.
@@ -6,9 +15,8 @@
 - Voice library lọc Tiếng Anh bao gồm cả US và UK; Favorites/ratings giữ nguyên ID cũ.
 - Voice Auditions thêm bộ văn bản British English riêng và benchmark tối thiểu 35 speaker khi Aivis Mao/Kohaku đã cài.
 - Self-test mới bắt buộc tạo audio thật cho toàn bộ 8 British voices và một render British theo timeline.
-- Installer nâng version lên `1.3.0`; nghiệm thu upgrade bắt đầu từ đúng installer 1.2.0 đã xác minh bằng SHA-256.
-- Piper LJSpeech High chưa đóng gói trong 1.3.0 vì Piper runtime hiện GPLv3; giữ ở trạng thái nghiên cứu cho đến khi hoàn tất phương án phân phối/giấy phép.
-- Chưa gắn FINAL VERIFIED cho 1.3.0 cho tới khi GitHub Actions Windows hoàn tất toàn bộ clean install, upgrade, offline, benchmark và checksum.
+- Installer dùng cùng AppId để nhận vị trí cài cũ và giữ dữ liệu người dùng.
+- Piper LJSpeech High chưa đóng gói vì Piper runtime hiện GPLv3; giữ ở trạng thái nghiên cứu cho đến khi hoàn tất phương án phân phối/giấy phép.
 
 # SRT Voice Studio 1.2.0
 
