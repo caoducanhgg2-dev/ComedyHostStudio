@@ -56,4 +56,4 @@ Cách dùng:
 6. Nếu checksum nền không đúng, updater dừng trước khi ghi file. Nếu lỗi trong lúc cập nhật, các file đã thay được rollback từ bản sao tạm.
 7. Sau khi thành công, `DisplayVersion` trong Windows được cập nhật lên 1.3.1.
 
-CI phải dựng lại đúng frozen app của commit 1.3.0, so hash với frozen app mới, đóng gói **delta thật**, rồi kiểm tra: kết quả sau patch phải byte-for-byte tương đương build mới, chạy patch lần hai không thay đổi kết quả, và baseline bị sửa phải bị từ chối trước khi ghi đè.
+CI dùng trực tiếp **installer 1.3.0 đã phát hành và đã nghiệm thu**, kiểm tra SHA-256 của installer rồi cài im lặng vào thư mục staging để lấy đúng byte của bản người dùng đang có. Sau đó CI so với frozen build mới, đóng gói **delta thật**, giữ nguyên các file uninstall do Inno Setup quản lý, và kiểm tra: kết quả app sau patch phải byte-for-byte tương đương build mới, chạy patch lần hai không thay đổi kết quả, baseline bị sửa phải bị từ chối trước khi ghi đè, và luồng tự tìm thư mục cài qua registry phải cập nhật được `DisplayVersion`.
