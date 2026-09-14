@@ -27,32 +27,32 @@ class VoicePanel(QWidget):
         notice=QLabel(LICENSE_NOTICE);notice.setWordWrap(True);layout.addWidget(notice)
         link=QLabel(f'<a style="color:#66b7ff" href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
         self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận các điều kiện sử dụng gói Aivis');layout.addWidget(self.accept_license)
-        self.install=QPushButton('Tải gói thử nghiệm Aivis • Mao + Kohaku');layout.addWidget(self.install)
+        self.install=QPushButton('Tải / cập nhật gói Aivis Nhật');layout.addWidget(self.install)
         self.accept_license.toggled.connect(self.refresh_install);self.install.clicked.connect(self.install_pack)
         self.filter.currentIndexChanged.connect(self.refresh)
         self.list.currentItemChanged.connect(self.selection)
         self.use.clicked.connect(self.select_voice);self.favorite.clicked.connect(self.toggle_favorite)
-        self.refresh()
-        self.refresh_install()
+        self.refresh();self.refresh_install()
 
     def refresh_install(self):
-        installed=self.window.aivis_pack.available()
-        self.install.setText('Gói Aivis đã cài' if installed else 'Tải gói thử nghiệm Aivis • Mao + Kohaku')
-        self.install.setEnabled(not installed and not self.window.busy() and self.accept_license.isChecked())
+        installed=self.window.aivis_pack.available();complete=self.window.aivis_pack.complete()
+        if complete:text='Gói Aivis Nhật đã đầy đủ • 6 giọng'
+        elif installed:text='Cập nhật Aivis • thêm 4 giọng Nhật mới'
+        else:text='Tải gói Aivis Nhật • 6 giọng'
+        self.install.setText(text)
+        self.install.setEnabled(not complete and not self.window.busy() and self.accept_license.isChecked())
 
     def install_pack(self):
         if self.window.busy() or not self.accept_license.isChecked():return
         self.window.start('install_aivis',dict(pack=self.window.aivis_pack))
 
     def selected(self):
-        item=self.list.currentItem()
-        return self.voices.get(item.data(Qt.UserRole)) if item else None
+        item=self.list.currentItem();return self.voices.get(item.data(Qt.UserRole)) if item else None
 
     def refresh(self):
         previous=self.selected().id if hasattr(self,'voices') and self.selected() else None
         self.voices={v.id:v for v in self.window.backend.list_voices()}
-        saved=preferences.read().get('voice_ratings',{})
-        self.ratings=saved if isinstance(saved,dict) else {}
+        saved=preferences.read().get('voice_ratings',{});self.ratings=saved if isinstance(saved,dict) else {}
         mode=self.filter.currentData();self.list.clear()
         for voice in self.voices.values():
             rating=score(self.ratings.get(voice.id))
@@ -66,33 +66,29 @@ class VoicePanel(QWidget):
             item.setData(Qt.UserRole,voice.id);self.list.addItem(item)
             if voice.id==previous:self.list.setCurrentItem(item)
         if self.list.count() and self.list.currentRow()<0:self.list.setCurrentRow(0)
-        self.status.setText('Chưa có giọng đủ kết quả nghe kiểm chứng để gắn nhãn Đề xuất.' if mode=='recommended' and not self.list.count() else f'{self.list.count()} giọng • Các phong cách bản địa không được tính thành giọng mới.')
+        self.status.setText('Chưa có giọng đủ kết quả nghe kiểm chứng để gắn nhãn Đề xuất.' if mode=='recommended' and not self.list.count() else f'{self.list.count()} giọng • Đặc tính trong tên chỉ để chọn nhanh; phong cách không được tính thành giọng mới.')
         self.selection()
 
     def selection(self,*_):
         import html
         voice=self.selected();self.use.setEnabled(bool(voice));self.favorite.setEnabled(bool(voice))
         if not voice:self.details.clear();return
-        esc=html.escape
-        rating=score(self.ratings.get(voice.id))
-        assessment='Điểm tự nhiên, phát âm và biểu cảm: chưa được nghe chấm. Không dùng thông số kỹ thuật thay cho điểm chất lượng.'
+        esc=html.escape;rating=score(self.ratings.get(voice.id))
+        assessment='Điểm tự nhiên, phát âm và biểu cảm: chưa được nghe chấm. Chú thích đặc tính chỉ là mô tả tham khảo, không thay cho điểm chất lượng.'
         if rating is not None:
-            record=self.ratings[voice.id]
-            assessment=f'Điểm nghe do người dùng cung cấp: {rating:.2f}/10. Người chấm: {esc(record["reviewer"])}. {esc(record.get("notes", ""))}'
+            record=self.ratings[voice.id];assessment=f'Điểm nghe do người dùng cung cấp: {rating:.2f}/10. Người chấm: {esc(record["reviewer"])}. {esc(record.get("notes", ""))}'
         self.favorite.setText('★ Bỏ yêu thích' if voice.id in self.favorites else '☆ Thêm yêu thích')
-        self.details.setHtml(f'<b>{esc(voice.name)}</b><p>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}<br>Giấy phép: {esc(voice.license)}</p>'
-            f'<p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p>'
-            f'<p>{assessment}</p>')
+        label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
+        self.details.setHtml(f'<b>{esc(label)}</b><p>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}<br>Giấy phép: {esc(voice.license)}</p>'
+            f'<p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p><p>{assessment}</p>')
 
     def load_ratings(self):
         if self.window.busy():return
         path,_=QFileDialog.getOpenFileName(self,'Chọn bảng điểm nghe','','Bảng điểm CSV (*.csv)')
         if not path:return
         try:
-            records=read_csv(path,set(self.voices))
-            value=preferences.read();existing=value.get('voice_ratings',{})
-            existing=dict(existing) if isinstance(existing,dict) else {}
-            existing.update(records);value['voice_ratings']=existing
+            records=read_csv(path,set(self.voices));value=preferences.read();existing=value.get('voice_ratings',{})
+            existing=dict(existing) if isinstance(existing,dict) else {};existing.update(records);value['voice_ratings']=existing
             preferences.write(value);self.refresh()
         except Exception as exc:self.window.show_error(str(exc),'Không thay đổi điểm đã lưu.')
 
@@ -101,13 +97,11 @@ class VoicePanel(QWidget):
         voice=self.selected()
         if not voice:return
         self.window.language.setCurrentIndex(self.window.language.findData(voice.language))
-        self.window.voice.setCurrentIndex(self.window.voice.findData(voice.id))
-        self.window.tabs.setCurrentIndex(0)
+        self.window.voice.setCurrentIndex(self.window.voice.findData(voice.id));self.window.tabs.setCurrentIndex(0)
 
     def toggle_favorite(self):
         voice=self.selected()
         if not voice:return
         if voice.id in self.favorites:self.favorites.remove(voice.id)
         else:self.favorites.add(voice.id)
-        value=preferences.read();value['favorite_voices']=sorted(self.favorites);preferences.write(value)
-        self.refresh()
+        value=preferences.read();value['favorite_voices']=sorted(self.favorites);preferences.write(value);self.refresh()
