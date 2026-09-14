@@ -56,7 +56,22 @@ def optional_test(folder,cancel):
         voice=voices[0]
         samples,rate=backend.synthesize_style('今日は楽しい一日です。','Japanese',voice.id,voice.styles[1]['id'],cancel)
         assert len(samples)>0 and rate==48000
-        return dict(voices=durations,stress_captions=74,overlaps=0,start_times_unchanged=True,native_style=True)
+        from .preview import PreviewCache
+        from .timeline import read_srt,slots_for
+        from .fitting import fit_processed
+        from dataclasses import replace
+        import numpy as np
+        cache=PreviewCache();slot=slots_for(read_srt(source))[0]
+        selected=replace(settings,native_style=voice.styles[1]['id'])
+        count=[0];original=backend.synthesize_style
+        def counted(*args,**kwargs):count[0]+=1;return original(*args,**kwargs)
+        backend.synthesize_style=counted
+        cache.get('A',slot.caption.text,selected,backend,cancel,slot)
+        b=cache.get('B',slot.caption.text,selected,backend,cancel,slot)
+        c=cache.get('C',slot.caption.text,selected,backend,cancel,slot)
+        expected,_=fit_processed(b.samples,b.rate,slot,selected,cache.emotion_tempo,folder,cancel)
+        assert count[0]==1 and np.array_equal(c.samples,expected)
+        return dict(voices=durations,stress_captions=74,overlaps=0,start_times_unchanged=True,native_style=True,abc_shared_fit=True)
     finally:pack.close()
 
 

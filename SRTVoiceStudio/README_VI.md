@@ -70,3 +70,12 @@ Preview C và xuất bản mới đều dùng `fitting.py` duy nhất.
 
 Kết quả Windows runner không thay thế kiểm tra bằng tai và nghiệm thu trên máy
 Windows 10/11 cụ thể của người dùng. Hiệu quả cảm xúc là DSP, có giới hạn tự nhiên.
+
+## Nâng cấp 1.2.0 — ứng viên đang kiểm thử
+
+- Tab **Hàng đợi xử lý**: thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hoặc sửa từng hàng, hủy một/toàn bộ, thử lại tệp lỗi. Một tệp lỗi không dừng các tệp sau. Mỗi SRT xuất một MP3; tên trùng được thêm số.
+- Tab **Thư viện giọng**: lọc Anh/Nhật/đã cài/yêu thích. Chọn Dùng giọng này để trở về cấu hình và nghe A/B/C.
+- Gói Aivis tải tùy chọn khoảng 1,4 GB; cần mạng khi cài lần đầu, sau đó tổng hợp trên máy. Đọc điều kiện ACML trước khi tải. Các phong cách bản địa nằm dưới cùng một giọng; đổi phong cách làm mới A, B, C.
+- Menu **Cấu hình** lưu/nạp tùy chọn. Dữ liệu và voice pack nằm ngoài thư mục cài để giữ qua nâng cấp.
+- Underfill V2 đo sau cảm xúc/hiệu ứng, giữ START và giới hạn 0.88–1.20x. Khoảng lặng còn lại trên 0,80 giây ở tốc độ tối thiểu hiện cảnh báo, không đổi thành lỗi overlap.
+- Không có điểm chất lượng cảm nhận tự tạo. Xem VOICE_RESEARCH_1.2.md và bộ nghe thử trước khi coi một giọng là đề xuất.

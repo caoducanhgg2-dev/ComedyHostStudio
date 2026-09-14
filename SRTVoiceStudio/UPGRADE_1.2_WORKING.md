@@ -1,8 +1,7 @@
 # SRT Voice Studio 1.2 — working checkpoint, not a verified release
 
 The baseline remains the verified 1.1.0 source (`33fea46`) and installer. The
-current working branch is `srt-voice-studio/1.2.0`. The installer version has not
-yet been changed; no 1.2 installer is certified by this checkpoint.
+current working branch is `srt-voice-studio/1.2.0`. Installer metadata now targets 1.2.0; Windows acceptance is running. No final verification is asserted.
 
 Implemented in the working source:
 

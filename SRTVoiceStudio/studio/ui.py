@@ -123,10 +123,10 @@ class Window(QMainWindow):
         central = QWidget(); self.setCentralWidget(central)
         outer = QVBoxLayout(central); outer.setContentsMargins(18, 10, 18, 12); outer.setSpacing(10)
         header = QHBoxLayout()
-        title = QLabel('SRT Voice Studio <span style="color:#309fff">1.1.0</span>')
+        title = QLabel(f'SRT Voice Studio <span style="color:#309fff">{__version__}</span>')
         title.setStyleSheet('font-size: 27px; font-weight: 700;')
         header.addWidget(title); header.addStretch()
-        badge = QLabel('●  Ngoại tuyến · Không API')
+        badge = QLabel('●  Ngoại tuyến · Trên máy')
         badge.setStyleSheet('color:#46dec2; background:#123b39; border-radius:14px; padding:7px 13px;')
         header.addWidget(badge); outer.addLayout(header)
         subtitle = QLabel('Tiếng Anh (Mỹ) / Tiếng Nhật · Chỉ xuất một MP3 · Giữ nguyên mốc SRT')
@@ -265,11 +265,19 @@ class Window(QMainWindow):
         from .batch_ui import BatchPanel
         self.batch_panel=BatchPanel(self);self.tabs.addTab(self.batch_panel,'Hàng đợi xử lý')
         from .voice_ui import VoicePanel
-        self.voice_panel=VoicePanel(self);self.tabs.addTab(self.voice_panel,'Thư viện giọng')
+        self.voice_panel=VoicePanel(self)
+        voice_scroll=QScrollArea();voice_scroll.setWidgetResizable(True);voice_scroll.setWidget(self.voice_panel)
+        self.tabs.addTab(voice_scroll,'Thư viện giọng')
+        self.tabs.currentChanged.connect(self.tab_changed)
         self.language_changed(); self.refresh_controls()
         menu=self.menuBar().addMenu('Cấu hình')
         menu.addAction('Lưu cấu hình hiện tại').triggered.connect(self.save_preferences)
         menu.addAction('Nạp cấu hình đã lưu').triggered.connect(self.load_preferences)
+
+    def tab_changed(self,index):
+        self.generate.setVisible(index==0)
+        self.open_folder.setVisible(index==0)
+        self.report.setVisible(index==0)
 
     def save_preferences(self):
         from .preferences import save_settings

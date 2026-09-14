@@ -29,6 +29,10 @@ class UiChecks:
 
     def finish(self,passed,error=None):
         self.timer.stop()
+        if passed:
+            for index,name in enumerate(('main','batch','voices')):
+                self.window.tabs.setCurrentIndex(index);self.app.processEvents()
+                self.window.grab().save(str(data_dir()/('ui-'+name+'.png')))
         self.window.stop_preview()
         self.window.preview_cache.clear()
         self.temp.cleanup()

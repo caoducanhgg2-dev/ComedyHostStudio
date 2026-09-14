@@ -24,3 +24,11 @@ corruption, and are not an independent upstream authenticity check.
 Before public redistribution, assemble the corresponding source/license materials for the
 exact bundled GPL/LGPL binary builds. The automated build is for personal acceptance testing;
 this repository does not claim a completed third-party redistribution compliance package.
+
+## Optional Aivis pack (not bundled in the core installer)
+
+AivisSpeech Engine: https://github.com/Aivis-Project/AivisSpeech-Engine — LGPL-3.0; the original archive and its notices are preserved. Kohaku and Mao models: ACML-1.0, https://github.com/Aivis-Project/ACML/blob/master/ACML-1.0.md . Model use has content restrictions; commercial use is conditional.
+
+Japanese BERT ONNX conversion by tsukumijima, based on ku-nlp/deberta-v2-large-japanese-char-wwm: https://huggingface.co/tsukumijima/deberta-v2-large-japanese-char-wwm-onnx — CC-BY-SA-4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Downloaded files are unmodified; source revision and integrity hashes are recorded in each installed pack manifest.
+
+The optional archive extractor py7zr and its dependencies retain their distribution license metadata in the build. These licenses do not grant blanket rights to individual voice models.

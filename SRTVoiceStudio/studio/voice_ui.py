@@ -7,7 +7,7 @@ from . import ui_text as vi
 
 class VoicePanel(QWidget):
     def __init__(self,window):
-        super().__init__();self.window=window
+        super().__init__();self.window=window;self.setMinimumHeight(590)
         saved=preferences.read().get('favorite_voices',[])
         self.favorites=set(x for x in saved if isinstance(x,str)) if isinstance(saved,list) else set()
         layout=QVBoxLayout(self)
@@ -22,7 +22,7 @@ class VoicePanel(QWidget):
         self.status=QLabel();self.status.setWordWrap(True);layout.addWidget(self.status)
         from .aivis_pack import LICENSE_NOTICE,LICENSE_URL
         notice=QLabel(LICENSE_NOTICE);notice.setWordWrap(True);layout.addWidget(notice)
-        link=QLabel(f'<a href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
+        link=QLabel(f'<a style="color:#66b7ff" href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
         self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận các điều kiện sử dụng gói Aivis');layout.addWidget(self.accept_license)
         self.install=QPushButton('Tải gói thử nghiệm Aivis • Mao + Kohaku');layout.addWidget(self.install)
         self.accept_license.toggled.connect(self.refresh_install);self.install.clicked.connect(self.install_pack)

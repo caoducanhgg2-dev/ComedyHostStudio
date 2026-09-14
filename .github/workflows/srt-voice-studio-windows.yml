@@ -77,6 +77,7 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/stress-test.json" ci-logs/stress-test.json -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/*-test.json" ci-logs/ -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/VoicePacks/aivis-runtime/1.2.0/data/engine.log" ci-logs/aivis-engine.log -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-*.png" ci-logs/ -ErrorAction SilentlyContinue
           exit 0
       - name: Upload voice auditions
         if: always()

@@ -3,7 +3,7 @@ from pathlib import Path
 
 root = Path(SPECPATH)
 datas = [(str(root/'models'), 'models'), (str(root/'third_party'),'third_party'),
-         (str(root/'README_VI.md'),'.'), (str(root/'samples'),'samples')]
+         (str(root/'README_VI.md'),'.'), (str(root/'VOICE_RESEARCH_1.2.md'),'.'), (str(root/'samples'),'samples')]
 binaries = [(str(root/'bin'/'ffmpeg.exe'),'bin'), (str(root/'bin'/'ffprobe.exe'),'bin')]
 hiddenimports = ['PySide6.QtMultimedia','PySide6.QtWidgets', 'misaki.cutlet', 'unidic_lite']
 for package in ['kokoro_onnx','onnxruntime','espeakng_loader','phonemizer','fugashi','unidic_lite','py7zr','Cryptodome']:
@@ -14,7 +14,8 @@ for package in ['kokoro_onnx','onnxruntime','espeakng_loader','phonemizer','fuga
 # Collect Misaki's data without pulling in unrelated language engines / torch.
 from PyInstaller.utils.hooks import collect_data_files
 datas += collect_data_files('misaki')
-for package in ['kokoro-onnx','misaki','phonemizer','espeakng-loader','fugashi','unidic-lite']:
+for package in ['kokoro-onnx','misaki','phonemizer','espeakng-loader','fugashi','unidic-lite',
+                'py7zr','pycryptodomex','texttable','psutil','backports.zstd','brotli','pyppmd','pybcj','multivolumefile','inflate64']:
     datas += copy_metadata(package)
 a = Analysis([str(root/'main.py')],pathex=[str(root)],binaries=binaries,datas=datas,
     hiddenimports=hiddenimports,excludes=['tkinter','torch','spacy','transformers','pyopenjtalk','pytest'])
