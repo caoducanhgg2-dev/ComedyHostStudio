@@ -1,10 +1,9 @@
-"""Acceptance test for the ZIP delta updater."""
+"""Acceptance test for the ZIP delta updater against a real installed baseline."""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -23,6 +22,34 @@ def inventory(root: Path) -> dict[str, str]:
         for p in root.rglob("*")
         if p.is_file()
     }
+
+
+def is_installer_managed(rel: str) -> bool:
+    path = Path(rel)
+    return len(path.parts) == 1 and path.name.lower().startswith("unins")
+
+
+def assert_patched_install(target: Path, baseline: Path, current: Path) -> tuple[bool, int]:
+    target_inv = inventory(target)
+    current_inv = inventory(current)
+    baseline_inv = inventory(baseline)
+
+    for rel, wanted_hash in current_inv.items():
+        if target_inv.get(rel) != wanted_hash:
+            raise RuntimeError(f"Patched app mismatch: {rel}")
+
+    preserved = {
+        rel: value
+        for rel, value in baseline_inv.items()
+        if rel not in current_inv and is_installer_managed(rel)
+    }
+    unexpected = set(target_inv) - set(current_inv) - set(preserved)
+    if unexpected:
+        raise RuntimeError(f"Unexpected files after patch: {sorted(unexpected)[:10]}")
+    for rel, wanted_hash in preserved.items():
+        if target_inv.get(rel) != wanted_hash:
+            raise RuntimeError(f"Installer-managed file was modified: {rel}")
+    return True, len(preserved)
 
 
 def run_update(package_root: Path, target: Path, expect_success: bool) -> subprocess.CompletedProcess[str]:
@@ -72,14 +99,14 @@ def main() -> int:
         target = work / "LỒNG TIẾNG" / "SRT Voice Studio"
         shutil.copytree(baseline, target)
         run_update(package_root, target, expect_success=True)
-        exact_match = inventory(target) == inventory(current)
-        if not exact_match:
-            raise RuntimeError("Patched directory does not exactly match the current frozen app")
+        exact_app_match, preserved_installer_files = assert_patched_install(target, baseline, current)
 
+        first_pass = inventory(target)
         run_update(package_root, target, expect_success=True)
-        idempotent = inventory(target) == inventory(current)
+        idempotent = inventory(target) == first_pass
         if not idempotent:
             raise RuntimeError("Second update application changed the verified result")
+        assert_patched_install(target, baseline, current)
 
         candidates = [item for item in manifest["files"] if item.get("old_sha256")]
         if not candidates:
@@ -100,10 +127,13 @@ def main() -> int:
         "package": package.name,
         "from_version": manifest["from_version"],
         "to_version": manifest["to_version"],
+        "baseline_kind": manifest.get("baseline_kind"),
+        "baseline_run": manifest.get("baseline_run"),
         "changed_files": len(manifest["files"]),
         "deleted_files": len(manifest["delete"]),
         "payload_ratio": manifest["stats"]["payload_ratio"],
-        "exact_match": exact_match,
+        "exact_app_match": exact_app_match,
+        "preserved_installer_files": preserved_installer_files,
         "idempotent": idempotent,
         "corruption_rejected_without_partial_write": corruption_rejected_without_partial_write,
     }
