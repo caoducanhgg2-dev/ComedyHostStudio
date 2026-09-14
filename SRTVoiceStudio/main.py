@@ -26,6 +26,10 @@ def main():
     try:
         logging.info('SRT Voice Studio %s', __version__)
         clean_stale()
+        for name in ('batch','underfill-v2','install-voice','optional-voices'):
+            if '--'+name+'-test' in sys.argv:
+                from studio.upgrade_checks import run_test
+                return run_test(name)
         if '--underfill-test' in sys.argv:
             from studio.underfill_checks import underfill_test
             return underfill_test()
@@ -44,7 +48,7 @@ def main():
         return app.exec()
     except Exception as exc:
         logging.exception('Startup error')
-        if '--self-test' not in sys.argv and '--stress-test' not in sys.argv and '--underfill-test' not in sys.argv:
+        if not any(arg.endswith('-test') for arg in sys.argv):
             QMessageBox.critical(None, 'Không mở được ứng dụng', str(exc))
         return 1
     finally:

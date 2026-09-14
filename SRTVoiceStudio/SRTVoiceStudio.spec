@@ -6,7 +6,7 @@ datas = [(str(root/'models'), 'models'), (str(root/'third_party'),'third_party')
          (str(root/'README_VI.md'),'.'), (str(root/'samples'),'samples')]
 binaries = [(str(root/'bin'/'ffmpeg.exe'),'bin'), (str(root/'bin'/'ffprobe.exe'),'bin')]
 hiddenimports = ['PySide6.QtMultimedia','PySide6.QtWidgets', 'misaki.cutlet', 'unidic_lite']
-for package in ['kokoro_onnx','onnxruntime','espeakng_loader','phonemizer','fugashi','unidic_lite']:
+for package in ['kokoro_onnx','onnxruntime','espeakng_loader','phonemizer','fugashi','unidic_lite','py7zr','Cryptodome']:
     d,b,h = collect_all(package)
     datas += d
     binaries += b
