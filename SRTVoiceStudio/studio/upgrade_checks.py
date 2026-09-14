@@ -72,6 +72,9 @@ def run_test(name):
             elif name=='install-voice':
                 p=AivisPack();p.install(cancel);result=dict(installed=p.available())
             elif name=='optional-voices':result=optional_test(folder,cancel)
+            elif name=='voice-benchmark':
+                from .voice_benchmarks import generate
+                result=generate(data_dir()/'VoiceBenchmarks',cancel)
             else:raise ValueError(name)
         result.update(version=__version__,passed=True);code=0
     except Exception as exc:

@@ -83,7 +83,7 @@ for scenario in ('upgrade','clean'):
             data['real_74_caption_stress']=read_report('stress-test.json')
             subprocess.run([str(exe),'--underfill-test'],env=env,check=True,timeout=900)
             data['real_30_caption_underfill']=read_report('underfill-test.json')
-            for check in ('underfill-v2','batch','optional-voices'):
+            for check in ('underfill-v2','batch','optional-voices','voice-benchmark'):
                 subprocess.run([str(exe),'--'+check+'-test'],env=env,check=True,timeout=1200)
                 data[check]=read_report(check+'-test.json')
         assert not list((appdata/'Temp').glob('job-*')),'Temporary audio remains: '+repr([str(p) for p in (appdata/'Temp').glob('job-*')])

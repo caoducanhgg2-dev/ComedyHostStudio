@@ -80,7 +80,7 @@ class PackManager:
                 with zipfile.ZipFile(archive) as z:
                     if sum(i.file_size for i in z.infolist())>max(pack.size*30,1024**3):raise ValueError('Gói giải nén quá lớn.')
                     for info in z.infolist():
-                        safe_member(info.filename)
+                        safe_member(info.orig_filename)
                         if (info.external_attr>>16)&0o170000==0o120000:raise ValueError('Không chấp nhận liên kết trong gói.')
                     for info in z.infolist():check_cancel(cancel);z.extract(info,payload)
             else:

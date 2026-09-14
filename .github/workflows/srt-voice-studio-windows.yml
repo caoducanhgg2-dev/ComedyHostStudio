@@ -75,7 +75,16 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-test.json" ci-logs/ui-test.json -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/ui-preview.png" ci-logs/ui-preview.png -ErrorAction SilentlyContinue
           Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/stress-test.json" ci-logs/stress-test.json -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/*-test.json" ci-logs/ -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA/SRTVoiceStudio/VoicePacks/aivis-runtime/1.2.0/data/engine.log" ci-logs/aivis-engine.log -ErrorAction SilentlyContinue
           exit 0
+      - name: Upload voice auditions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.2_Voice_Auditions
+          path: ~/AppData/Local/SRTVoiceStudio/VoiceBenchmarks/
+          if-no-files-found: warn
       - name: Build diagnostics
         if: always()
         uses: actions/upload-artifact@v4

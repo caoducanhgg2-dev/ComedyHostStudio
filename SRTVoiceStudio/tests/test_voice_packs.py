@@ -52,7 +52,10 @@ def test_cancellation_during_download_removes_partial(tmp_path):
 @pytest.mark.parametrize('name',['../outside','/absolute','C:/outside','folder\\outside'])
 def test_zip_traversal_is_rejected_before_extraction(tmp_path,name):
     buffer=io.BytesIO()
-    with zipfile.ZipFile(buffer,'w') as z:z.writestr(name,b'invalid')
+    # ZipInfo normalizes os.sep on Windows at construction. Preserve the
+    # actual archive spelling so this fixture has identical bytes on both OSes.
+    info=zipfile.ZipInfo('placeholder');info.filename=name
+    with zipfile.ZipFile(buffer,'w') as z:z.writestr(info,b'invalid')
     body=buffer.getvalue();p=pack(body,format='zip');manager=PackManager(tmp_path,Opener(body))
     with pytest.raises(ValueError,match='an toàn'):manager.install(p,threading.Event())
     assert not manager.location(p).exists()

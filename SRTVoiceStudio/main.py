@@ -26,7 +26,7 @@ def main():
     try:
         logging.info('SRT Voice Studio %s', __version__)
         clean_stale()
-        for name in ('batch','underfill-v2','install-voice','optional-voices'):
+        for name in ('batch','underfill-v2','install-voice','optional-voices','voice-benchmark'):
             if '--'+name+'-test' in sys.argv:
                 from studio.upgrade_checks import run_test
                 return run_test(name)
