@@ -1,6 +1,6 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
-from PySide6.QtWidgets import QApplication,QMessageBox
+from PySide6.QtWidgets import QApplication,QMessageBox,QLabel
 from studio.ui import Window
 import pytest
 
@@ -14,6 +14,8 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
         assert w.settings().language=='English US' and w.settings().voice=='af_heart'
         assert w.settings().emotion=='Natural' and w.settings().effect=='None'
         assert w.language.currentText()=='Tiếng Anh (Mỹ)' and w.generate.text()=='▶  TẠO MP3'
+        subtitle=w.findChild(QLabel,'appSubtitle')
+        assert subtitle is not None and subtitle.text().startswith('Tiếng Anh (Mỹ / Anh) / Tiếng Nhật')
         assert w.language.findData('English UK')>=0
         w.language.setCurrentIndex(w.language.findData('English UK'))
         assert w.language.currentText()=='Tiếng Anh (Anh)'
