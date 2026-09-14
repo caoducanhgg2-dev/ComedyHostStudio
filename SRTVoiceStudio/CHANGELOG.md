@@ -1,3 +1,15 @@
+# SRT Voice Studio 1.3.0 — đang nghiệm thu
+
+- Thêm 8 speaker British English Kokoro chạy local/offline: Alice, Emma, Isabella, Lily, Daniel, Fable, George, Lewis.
+- Thêm ngôn ngữ `English UK` / `Tiếng Anh (Anh)` và dùng G2P `en-gb`; voice US/UK không được chọn chéo vùng.
+- Tổng Kokoro tích hợp sẵn tăng từ 25 lên 33 speaker: 20 US + 8 UK + 5 Japanese.
+- Voice library lọc Tiếng Anh bao gồm cả US và UK; Favorites/ratings giữ nguyên ID cũ.
+- Voice Auditions thêm bộ văn bản British English riêng và benchmark tối thiểu 35 speaker khi Aivis Mao/Kohaku đã cài.
+- Self-test mới bắt buộc tạo audio thật cho toàn bộ 8 British voices và một render British theo timeline.
+- Installer nâng version lên `1.3.0`; nghiệm thu upgrade bắt đầu từ đúng installer 1.2.0 đã xác minh bằng SHA-256.
+- Piper LJSpeech High chưa đóng gói trong 1.3.0 vì Piper runtime hiện GPLv3; giữ ở trạng thái nghiên cứu cho đến khi hoàn tất phương án phân phối/giấy phép.
+- Chưa gắn FINAL VERIFIED cho 1.3.0 cho tới khi GitHub Actions Windows hoàn tất toàn bộ clean install, upgrade, offline, benchmark và checksum.
+
 # SRT Voice Studio 1.2.0
 
 Trạng thái: **AUTOMATED WINDOWS ACCEPTANCE VERIFIED** tại source commit `18143e9844b6b9e73b737723a22f1213c07c98bc`, GitHub Actions run `34822400144`.
