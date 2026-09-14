@@ -1,11 +1,17 @@
-# 1.2.0 — ứng viên nghiệm thu
+# SRT Voice Studio 1.2.0
+
+Trạng thái: **AUTOMATED WINDOWS ACCEPTANCE VERIFIED** tại source commit `18143e9844b6b9e73b737723a22f1213c07c98bc`, GitHub Actions run `34822400144`.
 
 - Xử lý SRT hàng loạt, cấu hình riêng, hủy/thử lại và tên đầu ra tránh ghi đè.
-- Underfill V2 dùng chung với C Preview và render; giữ START, giới hạn 0,88–1,20×.
-- Gói Aivis tùy chọn có checksum, Mao/Kohaku và phong cách bản địa.
+- Batch 1/5/20 file đã nghiệm thu; một file lỗi không dừng hàng đợi; retry PASS.
+- Underfill V2 dùng chung với C Preview và render; giữ START, giới hạn 0,88–1,20×, overlap 0.
+- Stress 74 caption English US/Japanese đạt 74/74 hợp lệ, overlap 0.
+- Gói Aivis tùy chọn có checksum, Mao/Kohaku và phong cách bản địa; giữ model hiện có nếu xung đột thay vì ghi đè.
 - Thư viện giọng, yêu thích, bảng điểm nghe có trọng số và bộ nghe thử A/C.
-- Nâng cấp tại chỗ từ 1.1.0, bảo toàn dữ liệu người dùng.
-- Chưa tự chứng nhận chất lượng nghe hoặc FINAL VERIFIED.
+- 27 giọng có technical benchmark PASS; chưa tự chứng nhận naturalness vì `ratings.csv` chưa được người nghe chấm.
+- Nâng cấp tại chỗ từ 1.1.0, bảo toàn dữ liệu người dùng; clean install và uninstall đều PASS.
+- Installer: `SRTVoiceStudio_Setup_1.2.0.exe`, SHA-256 `48C10CBB68B09E2458D651F6057B592DFDF88C8F6B947425761A41F9A3FBE132`.
+- Xem `RELEASE_1.2.0.md` để biết toàn bộ bằng chứng nghiệm thu và giới hạn chứng nhận chất lượng giọng.
 
 # SRT Voice Studio 1.1.0
 
