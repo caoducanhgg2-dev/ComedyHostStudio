@@ -85,7 +85,7 @@ def main() -> int:
         raise SystemExit("Package is not a delta; refusing to ship the full app as an update.")
 
     manifest = {
-        "format": 1,
+        "format": 2,
         "product": PRODUCT,
         "app_id": APP_ID,
         "from_version": args.from_version,
@@ -94,6 +94,8 @@ def main() -> int:
         "baseline_run": args.baseline_run,
         "baseline_kind": "verified-installed-release",
         "preserve_installer_files": "root unins*",
+        "persistent_rollback": True,
+        "rollback_audit_root": "%LOCALAPPDATA%/SRTVoiceStudio/updates",
         "files": changed,
         "delete": deleted,
         "stats": {
@@ -112,10 +114,11 @@ def main() -> int:
     (out / "update_manifest.json").write_text(manifest_text, encoding="utf-8")
 
     package = out / f"SRTVoiceStudio_Update_{args.from_version}_to_{args.to_version}.zip"
+    tool_root = ROOT / "build_tools" / "update_zip"
     with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         archive.writestr("update_manifest.json", manifest_text)
-        archive.write(ROOT / "build_tools" / "update_zip" / "Apply_Update.cmd", "Apply_Update.cmd")
-        archive.write(ROOT / "build_tools" / "update_zip" / "Apply_Update.ps1", "Apply_Update.ps1")
+        for tool in ("Apply_Update.cmd", "Apply_Update.ps1", "Rollback_Update.cmd", "Rollback_Update.ps1"):
+            archive.write(tool_root / tool, tool)
         for item in changed:
             rel = str(item["path"])
             archive.write(new[rel], f"payload/{rel}")
@@ -124,6 +127,7 @@ def main() -> int:
         "package": package.name,
         "sha256": digest(package),
         "size": package.stat().st_size,
+        "rollback_tools": ["Rollback_Update.cmd", "Rollback_Update.ps1"],
         "manifest": manifest,
     }
     (out / "update-build.json").write_text(
