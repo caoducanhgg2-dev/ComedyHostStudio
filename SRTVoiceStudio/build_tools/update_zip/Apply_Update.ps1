@@ -14,6 +14,7 @@ if (-not (Test-Path -LiteralPath $ManifestPath)) {
 }
 $Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $RegPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1"
+$AuditDir = Join-Path $env:LOCALAPPDATA "SRTVoiceStudio\updates"
 
 function Get-Sha256([string]$Path) {
     $Stream = [System.IO.File]::OpenRead($Path)
@@ -104,6 +105,8 @@ foreach ($Item in @($Manifest.files)) {
         Relative = $Relative
         Dest = $Dest
         Payload = $Payload
+        OldSha = if ($null -ne $Item.old_sha256) { [string]$Item.old_sha256 } else { $null }
+        NewSha = [string]$Item.sha256
     }
 }
 
@@ -124,27 +127,57 @@ foreach ($Item in @($Manifest.delete)) {
         Relative = $Relative
         Dest = $Dest
         Payload = $null
+        OldSha = [string]$Item.old_sha256
+        NewSha = $null
     }
 }
 
-$BackupRoot = Join-Path $env:TEMP ("SRTVoiceStudio-update-backup-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
+$ChangesNeeded = @($Plan | Where-Object { $_.State -in @("replace", "add", "delete") }).Count -gt 0
+$TransactionBackup = Join-Path $env:TEMP ("SRTVoiceStudio-update-backup-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $TransactionBackup | Out-Null
 $Undo = @()
 $RegistryChanged = $false
+$PersistentBackupRoot = $null
+$RollbackEntries = @()
 
 try {
+    if ($ChangesNeeded) {
+        New-Item -ItemType Directory -Force -Path $AuditDir | Out-Null
+        $Stamp = (Get-Date).ToString("yyyyMMdd-HHmmssfff")
+        $PersistentBackupRoot = Join-Path $AuditDir ("rollback-$($Manifest.from_version)-before-$($Manifest.to_version)-$Stamp-" + [guid]::NewGuid().ToString("N").Substring(0,8))
+        New-Item -ItemType Directory -Force -Path (Join-Path $PersistentBackupRoot "files") | Out-Null
+    }
+
     foreach ($Entry in $Plan) {
         if (($Entry.State -eq "already-new") -or ($Entry.State -eq "already-deleted")) {
             continue
         }
 
-        $Backup = Join-Path $BackupRoot ($Entry.Relative -replace "/", "\")
+        $TransactionFile = Join-Path $TransactionBackup ($Entry.Relative -replace "/", "\")
         if (($Entry.State -eq "replace") -or ($Entry.State -eq "delete")) {
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Backup) | Out-Null
-            Copy-Item -LiteralPath $Entry.Dest -Destination $Backup -Force
-            $Undo += [pscustomobject]@{ Action = "restore"; Dest = $Entry.Dest; Backup = $Backup }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $TransactionFile) | Out-Null
+            Copy-Item -LiteralPath $Entry.Dest -Destination $TransactionFile -Force
+            $Undo += [pscustomobject]@{ Action = "restore"; Dest = $Entry.Dest; Backup = $TransactionFile }
+
+            $PersistentFile = Join-Path (Join-Path $PersistentBackupRoot "files") ($Entry.Relative -replace "/", "\")
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PersistentFile) | Out-Null
+            Copy-Item -LiteralPath $Entry.Dest -Destination $PersistentFile -Force
+            $RollbackEntries += [ordered]@{
+                action = "restore"
+                path = $Entry.Relative
+                backup = "files/$($Entry.Relative)"
+                old_sha256 = $Entry.OldSha
+                new_sha256 = $Entry.NewSha
+            }
         } elseif ($Entry.State -eq "add") {
             $Undo += [pscustomobject]@{ Action = "remove"; Dest = $Entry.Dest; Backup = $null }
+            $RollbackEntries += [ordered]@{
+                action = "remove"
+                path = $Entry.Relative
+                backup = $null
+                old_sha256 = $null
+                new_sha256 = $Entry.NewSha
+            }
         }
 
         if ($Entry.Kind -eq "delete") {
@@ -170,25 +203,49 @@ try {
         }
     }
 
+    if ($ChangesNeeded) {
+        $RollbackManifest = [ordered]@{
+            format = 1
+            product = [string]$Manifest.product
+            from_version = [string]$Manifest.from_version
+            to_version = [string]$Manifest.to_version
+            created_at = (Get-Date).ToString("o")
+            target = $TargetDir
+            entries = @($RollbackEntries)
+        }
+        $RollbackManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PersistentBackupRoot "rollback_manifest.json") -Encoding UTF8
+    }
+
     if ((-not $SkipRegistry) -and (Test-Path $RegPath)) {
         Set-ItemProperty -Path $RegPath -Name DisplayVersion -Value ([string]$Manifest.to_version)
         $RegistryChanged = $true
     }
 
-    $AuditDir = Join-Path $env:LOCALAPPDATA "SRTVoiceStudio\updates"
-    New-Item -ItemType Directory -Force -Path $AuditDir | Out-Null
-    [ordered]@{
-        product = [string]$Manifest.product
-        from_version = [string]$Manifest.from_version
-        to_version = [string]$Manifest.to_version
-        applied_at = (Get-Date).ToString("o")
-        target = $TargetDir
-        changed_files = @($Manifest.files).Count
-        deleted_files = @($Manifest.delete).Count
-    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $AuditDir "last-update.json") -Encoding UTF8
+    if ($ChangesNeeded) {
+        New-Item -ItemType Directory -Force -Path $AuditDir | Out-Null
+        [ordered]@{
+            product = [string]$Manifest.product
+            from_version = [string]$Manifest.from_version
+            to_version = [string]$Manifest.to_version
+            applied_at = (Get-Date).ToString("o")
+            target = $TargetDir
+            changed_files = @($Manifest.files).Count
+            deleted_files = @($Manifest.delete).Count
+            rollback_available = $true
+            rollback_dir = $PersistentBackupRoot
+            rollback_manifest = (Join-Path $PersistentBackupRoot "rollback_manifest.json")
+        } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $AuditDir "last-update.json") -Encoding UTF8
+    }
 
     Write-Host ""
-    Write-Host "UPDATE SUCCESS: SRT Voice Studio $($Manifest.to_version)"
+    if ($ChangesNeeded) {
+        Write-Host "UPDATE SUCCESS: SRT Voice Studio $($Manifest.to_version)"
+        Write-Host "Rollback snapshot: $PersistentBackupRoot"
+        Write-Host "Use Rollback_Update.cmd from this ZIP if you need to restore $($Manifest.from_version)."
+    } else {
+        Write-Host "UPDATE ALREADY APPLIED: SRT Voice Studio $($Manifest.to_version)"
+        Write-Host "Existing rollback snapshot was preserved."
+    }
     Write-Host "No installer EXE was run. User data was preserved."
 }
 catch {
@@ -206,8 +263,11 @@ catch {
             }
         } catch {}
     }
+    if (($null -ne $PersistentBackupRoot) -and (Test-Path -LiteralPath $PersistentBackupRoot)) {
+        Remove-Item -LiteralPath $PersistentBackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
     throw
 }
 finally {
-    Remove-Item -LiteralPath $BackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $TransactionBackup -Recurse -Force -ErrorAction SilentlyContinue
 }
