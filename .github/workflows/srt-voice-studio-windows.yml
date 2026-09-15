@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: srt-voice-studio-zip-update-${{ github.ref }}
+  cancel-in-progress: true
 env:
   BASELINE_COMMIT: f0c382929aec77b5a880438560d56a424aa6ce8a
   BASELINE_RUN: '34854705948'
@@ -14,11 +17,18 @@ env:
   TO_VERSION: 1.3.1
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 90
     steps:
       - name: Checkout update source
         uses: actions/checkout@v4
+      - name: Runner diagnostics
+        shell: pwsh
+        run: |
+          Write-Host "RunnerOS=$env:RUNNER_OS"
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.10'
@@ -72,9 +82,18 @@ jobs:
           Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
           $installArgs = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$target")
           $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList $installArgs -Wait -PassThru
+          if ($null -eq $installProcess) { throw '1.3.0 installer process did not start.' }
           if ($installProcess.ExitCode -ne 0) { throw "1.3.0 installer exited with $($installProcess.ExitCode)" }
           if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Installed 1.3.0 executable is missing.' }
           if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'Installed 1.3.0 uninstaller is missing.' }
+
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if (-not (Test-Path $reg)) { throw 'Installed 1.3.0 registry record is missing.' }
+          $info = Get-ItemProperty -Path $reg
+          if ([string]$info.DisplayVersion -ne '1.3.0') { throw "Unexpected baseline DisplayVersion: $($info.DisplayVersion)" }
+          if ([IO.Path]::GetFullPath([string]$info.InstallLocation).TrimEnd('\') -ne [IO.Path]::GetFullPath($target).TrimEnd('\')) {
+            throw "Unexpected baseline InstallLocation: $($info.InstallLocation)"
+          }
 
           New-Item -ItemType Directory -Force SRTVoiceStudio/update-output | Out-Null
           [ordered]@{
@@ -111,8 +130,9 @@ jobs:
           $expanded = Join-Path $env:GITHUB_WORKSPACE 'registry-update-package'
           Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -LiteralPath $package -DestinationPath $expanded -Force
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "Registry-driven ZIP updater exited with $LASTEXITCODE" }
+          $updateProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $expanded 'Apply_Update.ps1'),'-NonInteractive') -Wait -PassThru
+          if ($null -eq $updateProcess) { throw 'ZIP updater process did not start.' }
+          if ($updateProcess.ExitCode -ne 0) { throw "Registry-driven ZIP updater exited with $($updateProcess.ExitCode)" }
 
           $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
           if (-not (Test-Path $reg)) { throw 'Installed app registry record is missing after update.' }
