@@ -33,6 +33,25 @@ function Get-Sha256([string]$Path) {
     }
 }
 
+function Get-AcceptedOldHashes($Item) {
+    $Values = New-Object System.Collections.Generic.List[string]
+    $Names = @($Item.PSObject.Properties.Name)
+    if (($Names -contains "old_sha256") -and ($null -ne $Item.old_sha256)) {
+        $Value = ([string]$Item.old_sha256).Trim().ToLowerInvariant()
+        if (-not [string]::IsNullOrWhiteSpace($Value)) { $Values.Add($Value) }
+    }
+    if (($Names -contains "old_sha256_variants") -and ($null -ne $Item.old_sha256_variants)) {
+        foreach ($Candidate in @($Item.old_sha256_variants)) {
+            if ($null -eq $Candidate) { continue }
+            $Value = ([string]$Candidate).Trim().ToLowerInvariant()
+            if ((-not [string]::IsNullOrWhiteSpace($Value)) -and (-not $Values.Contains($Value))) {
+                $Values.Add($Value)
+            }
+        }
+    }
+    return @($Values)
+}
+
 if ([string]::IsNullOrWhiteSpace($TargetDir)) {
     if ((-not $SkipRegistry) -and (Test-Path $RegPath)) {
         $TargetDir = [string](Get-ItemProperty -Path $RegPath -Name InstallLocation).InstallLocation
@@ -69,32 +88,38 @@ if ($Running.Count -gt 0) {
     }
 }
 
+# Build and validate the complete plan before writing anything. Each file may
+# accept more than one released 1.3.1 hash, but arbitrary modified bytes remain
+# rejected. The exact hash found on this machine is saved for rollback.
 $Plan = @()
 foreach ($Item in @($Manifest.files)) {
     $Relative = [string]$Item.path
     $Native = $Relative -replace "/", "\"
     $Dest = Join-Path $TargetDir $Native
     $Payload = Join-Path (Join-Path $PackageRoot "payload") $Native
+    $NewSha = ([string]$Item.sha256).ToLowerInvariant()
+    $AcceptedOld = @(Get-AcceptedOldHashes $Item)
     if (-not (Test-Path -LiteralPath $Payload)) {
         throw "Missing payload: $Relative"
     }
-    if ((Get-Sha256 $Payload) -ne ([string]$Item.sha256).ToLowerInvariant()) {
+    if ((Get-Sha256 $Payload) -ne $NewSha) {
         throw "Payload checksum mismatch: $Relative"
     }
 
+    $ActualOldSha = $null
     if (Test-Path -LiteralPath $Dest) {
         $CurrentHash = Get-Sha256 $Dest
-        if ($CurrentHash -eq ([string]$Item.sha256).ToLowerInvariant()) {
+        if ($CurrentHash -eq $NewSha) {
             $State = "already-new"
-        } elseif (($null -ne $Item.old_sha256) -and
-                  ($CurrentHash -eq ([string]$Item.old_sha256).ToLowerInvariant())) {
+        } elseif ($AcceptedOld -contains $CurrentHash) {
             $State = "replace"
+            $ActualOldSha = $CurrentHash
         } else {
-            throw "Baseline checksum mismatch; update stopped before overwrite: $Relative"
+            $Known = if ($AcceptedOld.Count) { $AcceptedOld -join ", " } else { "<new file expected>" }
+            throw "Baseline checksum mismatch; update stopped before overwrite: $Relative`nInstalled: $CurrentHash`nAccepted: $Known"
         }
     } else {
-        if (($null -ne $Item.old_sha256) -and
-            (-not [string]::IsNullOrWhiteSpace([string]$Item.old_sha256))) {
+        if ($AcceptedOld.Count -gt 0) {
             throw "Baseline file is missing: $Relative"
         }
         $State = "add"
@@ -105,21 +130,26 @@ foreach ($Item in @($Manifest.files)) {
         Relative = $Relative
         Dest = $Dest
         Payload = $Payload
-        OldSha = if ($null -ne $Item.old_sha256) { [string]$Item.old_sha256 } else { $null }
-        NewSha = [string]$Item.sha256
+        OldSha = $ActualOldSha
+        NewSha = $NewSha
     }
 }
 
 foreach ($Item in @($Manifest.delete)) {
     $Relative = [string]$Item.path
     $Dest = Join-Path $TargetDir ($Relative -replace "/", "\")
+    $AcceptedOld = @(Get-AcceptedOldHashes $Item)
+    $ActualOldSha = $null
     if (-not (Test-Path -LiteralPath $Dest)) {
         $State = "already-deleted"
     } else {
-        if ((Get-Sha256 $Dest) -ne ([string]$Item.old_sha256).ToLowerInvariant()) {
-            throw "Old file checksum mismatch; delete stopped: $Relative"
+        $CurrentHash = Get-Sha256 $Dest
+        if (-not ($AcceptedOld -contains $CurrentHash)) {
+            $Known = if ($AcceptedOld.Count) { $AcceptedOld -join ", " } else { "<none>" }
+            throw "Old file checksum mismatch; delete stopped: $Relative`nInstalled: $CurrentHash`nAccepted: $Known"
         }
         $State = "delete"
+        $ActualOldSha = $CurrentHash
     }
     $Plan += [pscustomobject]@{
         Kind = "delete"
@@ -127,7 +157,7 @@ foreach ($Item in @($Manifest.delete)) {
         Relative = $Relative
         Dest = $Dest
         Payload = $null
-        OldSha = [string]$Item.old_sha256
+        OldSha = $ActualOldSha
         NewSha = $null
     }
 }
@@ -159,9 +189,18 @@ try {
             Copy-Item -LiteralPath $Entry.Dest -Destination $TransactionFile -Force
             $Undo += [pscustomobject]@{ Action = "restore"; Dest = $Entry.Dest; Backup = $TransactionFile }
 
+            # Verify again before copying to the persistent rollback snapshot so
+            # rollback metadata always describes the exact bytes actually saved.
+            $BeforeWriteHash = Get-Sha256 $Entry.Dest
+            if ($BeforeWriteHash -ne $Entry.OldSha) {
+                throw "Baseline changed after preflight; update stopped: $($Entry.Relative)"
+            }
             $PersistentFile = Join-Path (Join-Path $PersistentBackupRoot "files") ($Entry.Relative -replace "/", "\")
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PersistentFile) | Out-Null
             Copy-Item -LiteralPath $Entry.Dest -Destination $PersistentFile -Force
+            if ((Get-Sha256 $PersistentFile) -ne $Entry.OldSha) {
+                throw "Persistent rollback backup verification failed: $($Entry.Relative)"
+            }
             $RollbackEntries += [ordered]@{
                 action = "restore"
                 path = $Entry.Relative
@@ -205,12 +244,13 @@ try {
 
     if ($ChangesNeeded) {
         $RollbackManifest = [ordered]@{
-            format = 1
+            format = 2
             product = [string]$Manifest.product
             from_version = [string]$Manifest.from_version
             to_version = [string]$Manifest.to_version
             created_at = (Get-Date).ToString("o")
             target = $TargetDir
+            exact_installed_old_hashes = $true
             entries = @($RollbackEntries)
         }
         $RollbackManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PersistentBackupRoot "rollback_manifest.json") -Encoding UTF8
@@ -234,6 +274,7 @@ try {
             rollback_available = $true
             rollback_dir = $PersistentBackupRoot
             rollback_manifest = (Join-Path $PersistentBackupRoot "rollback_manifest.json")
+            exact_installed_baseline_saved = $true
         } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $AuditDir "last-update.json") -Encoding UTF8
     }
 
