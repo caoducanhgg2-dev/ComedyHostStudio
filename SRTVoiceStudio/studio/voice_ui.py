@@ -27,6 +27,14 @@ class VoicePanel(QWidget):
         notice=QLabel(LICENSE_NOTICE);notice.setWordWrap(True);layout.addWidget(notice)
         link=QLabel(f'<a style="color:#66b7ff" href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
         self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận các điều kiện sử dụng gói Aivis');layout.addWidget(self.accept_license)
+        from .aivis_pack import MODEL_NAMES,MODEL_PACKS
+        self.pack_choice=QComboBox()
+        for uid,_,size,_ in MODEL_PACKS:self.pack_choice.addItem(f'{MODEL_NAMES[uid]} • model {size/1_000_000:.0f} MB',uid)
+        self.pack_choice.addItem('Tất cả 6 giọng Nhật',None)
+        layout.addWidget(self.pack_choice)
+        self.pack_notes=QLabel();self.pack_notes.setWordWrap(True);self.pack_notes.setOpenExternalLinks(True)
+        layout.addWidget(self.pack_notes)
+        self.pack_choice.currentIndexChanged.connect(self.refresh_install)
         self.install=QPushButton('Tải / cập nhật gói Aivis Nhật');layout.addWidget(self.install)
         self.accept_license.toggled.connect(self.refresh_install);self.install.clicked.connect(self.install_pack)
         self.filter.currentIndexChanged.connect(self.refresh)
@@ -35,16 +43,26 @@ class VoicePanel(QWidget):
         self.refresh();self.refresh_install()
 
     def refresh_install(self):
-        installed=self.window.aivis_pack.available();complete=self.window.aivis_pack.complete()
-        if complete:text='Gói Aivis Nhật đã đầy đủ • 6 giọng'
-        elif installed:text='Cập nhật Aivis • thêm 4 giọng Nhật mới'
-        else:text='Tải gói Aivis Nhật • 6 giọng'
-        self.install.setText(text)
+        import html
+        from .aivis_pack import EXTRA_VOICES,HUB
+        selected=self.pack_choice.currentData()
+        meta=next((v for v in EXTRA_VOICES if v['model']==selected),None)
+        if meta:
+            styles=' / '.join(display for display,_ in meta['styles'])
+            self.pack_notes.setText(f"{html.escape(meta['name'])}<br>Style: {html.escape(styles)}<br>"
+                f'<a style="color:#66b7ff" href="{HUB+selected}">Nguồn model và điều kiện sử dụng</a><br>'
+                'Mô tả theo trang model; chưa chấm chất lượng nghe. Engine/BERT dùng chung tải thêm nếu chưa có.')
+        else:
+            self.pack_notes.setText('Mao/Kohaku và các giọng cũ được giữ nguyên. Engine/BERT dùng chung chỉ tải nếu chưa có; không nằm trong ZIP cập nhật.')
+        complete=self.window.aivis_pack.complete([selected] if selected else None)
+        self.install.setText('Giọng đã tải • dùng offline' if complete else 'Tải giọng đã chọn • kiểm tra SHA-256')
         self.install.setEnabled(not complete and not self.window.busy() and self.accept_license.isChecked())
+        self.pack_choice.setEnabled(not self.window.busy())
 
     def install_pack(self):
         if self.window.busy() or not self.accept_license.isChecked():return
-        self.window.start('install_aivis',dict(pack=self.window.aivis_pack))
+        selected=self.pack_choice.currentData()
+        self.window.start('install_aivis',dict(pack=self.window.aivis_pack,model_ids=[selected] if selected else None))
 
     def selected(self):
         item=self.list.currentItem();return self.voices.get(item.data(Qt.UserRole)) if item else None
@@ -79,8 +97,9 @@ class VoicePanel(QWidget):
             record=self.ratings[voice.id];assessment=f'Điểm nghe do người dùng cung cấp: {rating:.2f}/10. Người chấm: {esc(record["reviewer"])}. {esc(record.get("notes", ""))}'
         self.favorite.setText('★ Bỏ yêu thích' if voice.id in self.favorites else '☆ Thêm yêu thích')
         label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
+        styles='; '.join(str(s['name']) for s in voice.styles) or 'Không có style bản địa riêng'
         self.details.setHtml(f'<b>{esc(label)}</b><p>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}<br>Giấy phép: {esc(voice.license)}</p>'
-            f'<p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p><p>{assessment}</p>')
+            f'<p>Phong cách bản địa: {esc(styles)}</p><p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p><p>{assessment}</p>')
 
     def load_ratings(self):
         if self.window.busy():return

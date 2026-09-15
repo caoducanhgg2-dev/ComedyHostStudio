@@ -1,6 +1,6 @@
 # SRT Voice Studio 1.4.0
 
-Bản 1.4 giữ nguyên engine timeline/Underfill V2 ổn định của 1.3.x, mở rộng thư viện giọng Nhật và chuyển phát hành nhỏ sang **ZIP delta update**. Mỗi SRT tạo một MP3 48 kHz, 192 kbps; START của caption không bị dịch chuyển và mục tiêu bắt buộc vẫn là overlap = 0.
+Bổ sung 4 giọng Nhật Aivis, ghi chú đặc điểm, tải riêng từng model và cập nhật ZIP có khôi phục bản cũ. Giữ timeline, A/B/C và hàng đợi hiện tại.
 
 ## Tạo MP3 và nghe thử
 
@@ -22,62 +22,60 @@ Cảnh báo V2 xuất hiện khi khoảng lặng còn trên 0,80 giây sau mức
 
 Thêm nhiều SRT hoặc thư mục, dùng cấu hình chung hay cấu hình riêng từng tệp. Hàng đợi xử lý tuần tự trong luồng nền. Có thể hủy công việc hiện tại hoặc cả hàng đợi, thử lại mục lỗi/hủy. Một tệp lỗi không ngăn các mục sau chạy. Mỗi SRT có MP3 và kết quả riêng.
 
-## Thư viện giọng 1.4
+## Giọng nền được giữ nguyên
 
-Kokoro tích hợp sẵn có **33 speaker thật**: 20 English US, 8 English UK và 5 Japanese. Gói Aivis Nhật là tùy chọn, bổ sung tối đa **6 speaker Nhật**, đưa tổng dung lượng thư viện lên ít nhất **39 speaker** khi cài đủ. Style/phong cách không được tính thành speaker riêng.
+Kokoro tích hợp sẵn có **33 speaker thật**:
 
-### 5 giọng Nhật Kokoro có sẵn
+- 20 giọng English US giữ nguyên từ 1.2.
+- 8 giọng English UK mới: `bf_alice`, `bf_emma`, `bf_isabella`, `bf_lily`, `bm_daniel`, `bm_fable`, `bm_george`, `bm_lewis`.
+- 5 giọng Japanese giữ nguyên.
 
-- `jf_alpha` — Nữ · sáng, trẻ trung, linh hoạt.
-- `jf_gongitsune` — Nữ · mềm, dịu, hợp kể chuyện.
-- `jf_nezumi` — Nữ · nhẹ, đáng yêu, thiên hoạt hình.
-- `jf_tebukuro` — Nữ · ấm, điềm tĩnh, tự nhiên.
-- `jm_kumo` — Nam · trầm vừa, bình tĩnh, hợp thuyết minh.
+Các giọng UK dùng chung model Kokoro/ONNX và `voices-v1.0.bin`, nên không cần tải engine mới và không làm thay đổi pipeline offline. Backend dùng `en-gb` cho British English và chặn chọn nhầm voice US/UK chéo vùng.
 
-### 6 giọng Nhật Aivis tùy chọn
+Gói thử nghiệm Aivis vẫn thêm Mao và Kohaku với nhiều phong cách bản địa. Khi Aivis đã cài, thư viện có tối thiểu 35 speaker (không tính style thành giọng mới). Lần cài Aivis đầu cần mạng và tải khoảng 1,38 GB; sau cài đủ và kiểm tra checksum, gói dùng cục bộ. Nếu Aivis đã có model khác phiên bản, ứng dụng giữ nguyên và báo xung đột thay vì ghi đè. Đọc điều kiện ACML trước khi dùng.
 
-- **Mao** — Nữ · tự nhiên, mềm, hội thoại đời thường. Style: Tự nhiên, Đời thường, Ngọt ngào, Điềm tĩnh, Trêu đùa, Man mác buồn.
-- **Kohaku** — Nữ · nhẹ, ngọt, thư giãn. Style: Tự nhiên, Ngọt ngào, Man mác buồn, Buồn ngủ.
-- **Rinne El** — Nữ · trẻ, sáng, giàu cảm xúc. Style: Tự nhiên, Giận dữ, Lo lắng, Vui vẻ, Buồn.
-- **Aida Shigeru** — Nam · baritone, trung niên, hợp kể chuyện. Style: Tự nhiên, Điềm tĩnh, Xa mic, Nặng/dày, Trung tính, Hô lớn, Ngạc nhiên.
-- **Mai** — Nữ · trẻ, mềm, biểu cảm. Style hiện dùng: Tự nhiên.
-- **Nise** — Nam · trẻ, tự nhiên, hội thoại. Style hiện dùng: Tự nhiên.
+Piper LJSpeech High vẫn là ứng viên nghiên cứu, chưa được đóng gói trong 1.3.0. Piper engine hiện dùng GPLv3 nên cần tách rõ nghĩa vụ phân phối/runtime trước khi đưa vào installer; không thêm chỉ để tăng số lượng giọng.
 
-Các mô tả trên chỉ giúp chọn nhanh, **không phải điểm chất lượng nghe**. Bộ Voice Auditions và ratings.csv vẫn là nguồn quyết định khi gắn nhãn Recommended.
+## Đánh giá nghe
 
-Gói Aivis tải theo yêu cầu, không tự tải khi chưa chọn. Model được pin phiên bản, kích thước và SHA-256. Lần cài mới đầy đủ tải khoảng 2,4 GB; máy đã có Mao/Kohaku chỉ tải phần còn thiếu. Sau khi cài đủ, engine/model chạy local. Nếu thư mục Aivis đã có file khác checksum, ứng dụng giữ nguyên và báo xung đột thay vì ghi đè.
+Giọng chưa có đánh giá nghe không được gán điểm giả. Bộ Voice Auditions 1.3 tạo A_original.mp3 và C_final.mp3 cho cả US/UK/JP/Aivis, cùng `index.html`, `benchmark.json` và `ratings.csv`. Trọng số: tự nhiên 35%, phát âm 25%, biểu cảm 15%, khớp tốc độ 10%, chất lượng âm thanh 10%, độ phổ biến 5%. Bộ lọc Đề xuất chỉ dùng điểm người dùng nhập đạt từ 8/10.
 
-Aivis model trong gói dùng ACML 1.0; engine AivisSpeech dùng LGPL-3.0; BERT đi kèm dùng CC-BY-SA-4.0. Cần đọc điều kiện giấy phép hiển thị trong ứng dụng trước khi dùng thương mại/review/comedy.
+## Cập nhật ZIP nhỏ và khôi phục
 
-## Cập nhật 1.3.1 → 1.4.0 bằng một ZIP nhỏ
+Gói cập nhật từ nền 1.3.1 được kiểm tra checksum chính xác, hỗ trợ hai biến thể
+1.3.1 đã xác minh (GitHub và gói đã bàn giao). Nếu máy đang ở 1.3.0 hoặc bản
+khác, updater từ chối thay file; cần gói đúng phiên bản nền.
+Không chạy lại installer EXE. ZIP vẫn có thể chứa EXE chương trình mới.
 
-Bản 1.4 ưu tiên **không chạy lại installer EXE**. Gói phát hành là `SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip` và chỉ chứa các file thực sự thay đổi cùng manifest/checksum.
+1. Giải nén ZIP và đóng app.
+2. Chạy Apply_Update.cmd. Updater xác minh toàn bộ file và sao lưu trước khi thay đổi.
+3. App mới được kiểm tra mở giao diện và tạo MP3 tiếng Nhật trong vùng dữ liệu thử riêng.
+4. Nếu kiểm tra thất bại, updater tự khôi phục các file cũ và thông tin phiên bản.
+5. Nếu phát hiện lỗi sau đó, đóng app và chạy Restore_Previous.cmd trong ZIP.
 
-Trong quá trình rà soát release đã phát hiện hai biến thể build 1.3.1 hợp lệ từng được tạo từ cùng dòng source. Vì vậy manifest 1.4 hỗ trợ **nhiều checksum baseline đã xác minh** thay vì buộc người dùng chọn hai ZIP khác nhau. Chỉ các hash đã biết mới được chấp nhận; file bị chỉnh sửa hoặc baseline lạ vẫn bị chặn trước khi ghi.
+Bản sao lưu nằm trong dữ liệu người dùng SRTVoiceStudio/updates, không bị xóa
+khi cập nhật thành công. Thư mục sao lưu cũng chứa script khôi phục để dùng khi
+đã xóa ZIP. Cập nhật bị gián đoạn được nhận diện bằng nhật ký; chạy updater hoặc
+script khôi phục để đưa các file về phiên bản cũ. Nếu khôi phục gặp lỗi khóa file,
+quyền ghi hoặc checksum, bản sao lưu được giữ nguyên và lỗi được báo rõ.
+Không thể bảo đảm khôi phục nếu ổ đĩa hoặc bản sao lưu đã bị mất/hỏng.
 
-1. Đóng SRT Voice Studio.
-2. Giải nén toàn bộ ZIP vào một thư mục tạm.
-3. Chạy `Apply_Update.cmd`.
-4. Updater tự tìm vị trí cài đặt, kiểm tra SHA-256 của payload và kiểm tra toàn bộ file cần thay **trước khi ghi đè**.
-5. Nếu baseline không thuộc danh sách checksum hợp lệ hoặc patch lỗi giữa chừng, updater dừng và transaction rollback trả các file đã động vào về trạng thái trước khi chạy.
-6. Khi update thành công, ứng dụng giữ một **persistent rollback snapshot** trong `%LOCALAPPDATA%\SRTVoiceStudio\updates`.
-7. Snapshot lưu chính xác bytes và SHA-256 cũ thực tế trên máy. Vì vậy máy dùng biến thể 1.3.1 nào sẽ rollback về đúng biến thể đó.
+## Giọng Nhật bổ sung và ghi chú
 
-Chạy lại cùng patch trên 1.4 đã cập nhật là idempotent: không thay đổi app và không ghi đè snapshot rollback hợp lệ.
+| Giọng | Đặc điểm theo trang model | Style bản địa |
+|---|---|---|
+| Rinne El | Giọng nữ trẻ | Normal, Angry, Fear, Happy, Sad |
+| Aida Shigeru | Nam trung niên, baritone | Normal, Calm, Far, Heavy, Mid, Shout, Surprise |
+| Mai | Giọng nữ trẻ | Normal |
+| Nise | Giọng nam trẻ | Normal |
 
-## Quay lại 1.3.1 nếu 1.4 có vấn đề
+Đã đối chiếu trang AivisHub ngày 15/09/2026. UUID, SHA-256 và nguồn của từng
+model được ghim trong studio/aivis_pack.py. Mô tả không phải điểm chất lượng nghe.
+Mao, Kohaku và 5 giọng Nhật Kokoro hiện có vẫn được giữ. Tổng khả năng: 11 speaker
+Nhật, trong đó 6 speaker Aivis tùy chọn; không tính style thành speaker mới.
 
-Giữ thư mục ZIP đã giải nén và chạy `Rollback_Update.cmd`. Rollback sẽ:
-
-- đọc snapshot gần nhất;
-- kiểm tra checksum các file 1.4 hiện tại trước khi phục hồi;
-- kiểm tra lại checksum bản sao cũ đã lưu;
-- khôi phục chính xác file cũ hoặc xóa file mới được thêm bởi patch;
-- trả `DisplayVersion` về 1.3.1 khi registry installer còn tồn tại;
-- tự rollback chính quá trình phục hồi nếu có lỗi giữa chừng.
-
-Sau khi quay về 1.3.1, có thể chạy `Apply_Update.cmd` lần nữa để cài lại 1.4. Snapshot rollback không thay đổi Favorites, gói giọng hoặc dữ liệu người dùng; updater chỉ tạo dữ liệu audit/rollback riêng dưới `%LOCALAPPDATA%\SRTVoiceStudio\updates`.
-
-## Nghiệm thu bắt buộc 1.4
-
-Build phát hành chỉ được coi là đạt khi đồng thời qua các kiểm tra: unit tests; 20 US + 8 UK + 5 Japanese Kokoro; 6 Aivis Japanese khi cài đủ; mapping style động; frozen-app check; delta từ artifact 1.3.1 đã xác minh; manifest chứa các biến thể baseline 1.3.1 đã biết; exact patched-app match; corruption guard không ghi dở; idempotency; snapshot lưu đúng baseline thực tế; persistent rollback về đúng baseline; reapply sau rollback; registry 1.3.1 → 1.4.0 → 1.3.1 → 1.4.0; và timeline vẫn overlap = 0.
+Trong thư viện giọng, chọn model muốn tải rồi chấp nhận điều kiện của model.
+Engine/BERT dùng chung tải một lần; model khoảng 250–258 MB mỗi giọng. Có thể
+chọn tải tất cả nhưng không bắt buộc. File tải lỗi không ghi đè model đang có.
+A/B/C hiện có dùng để nghe thử giọng sau khi cài. Chất lượng nghe cần người dùng
+đánh giá; không gắn nhãn tự nhiên hoặc điểm nghe đã kiểm chứng khi chưa chấm.

@@ -36,3 +36,16 @@ def test_dynamic_aivis_style_resolves_by_speaker_uuid_and_manifest_name():
     cancel=threading.Event()
     assert backend.resolve_style_id(v,None,cancel)==780001
     assert backend.resolve_style_id(v,1,cancel)==780004
+
+
+def test_selective_download_keeps_shared_runtime_and_only_selected_models():
+    from studio.aivis_pack import selected_packs
+    uid = EXTRA_VOICES[2]['model']
+    chosen = selected_packs([uid])
+    assert [p.filename for p in chosen if p.filename.endswith('.aivmx')] == [uid+'.aivmx']
+    assert any(p.id=='aivis-engine-windows' for p in chosen)
+    assert any(p.id.startswith('aivis-bert-') for p in chosen)
+    assert len([p for p in selected_packs() if p.filename.endswith('.aivmx')])==6
+    import pytest
+    with pytest.raises(ValueError):selected_packs(['unknown'])
+    with pytest.raises(ValueError):selected_packs([])

@@ -172,7 +172,8 @@ def main() -> int:
     } for v in alternate_variants)
 
     manifest = {
-        "format": 3,
+        "format": 4,
+        "health_check": "--update-health-check",
         "product": PRODUCT,
         "app_id": APP_ID,
         "from_version": args.from_version,
@@ -206,7 +207,7 @@ def main() -> int:
     tool_root = ROOT / "build_tools" / "update_zip"
     with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         archive.writestr("update_manifest.json", manifest_text)
-        for tool in ("Apply_Update.cmd", "Apply_Update.ps1", "Rollback_Update.cmd", "Rollback_Update.ps1"):
+        for tool in ("Apply_Update.cmd", "Apply_Update.ps1", "Restore_Previous.cmd", "Restore_Previous.ps1", "Update_Common.ps1"):
             archive.write(tool_root / tool, tool)
         for item in changed:
             rel = str(item["path"])
@@ -216,7 +217,7 @@ def main() -> int:
         "package": package.name,
         "sha256": digest(package),
         "size": package.stat().st_size,
-        "rollback_tools": ["Rollback_Update.cmd", "Rollback_Update.ps1"],
+        "rollback_tools": ["Restore_Previous.cmd", "Restore_Previous.ps1", "Update_Common.ps1"],
         "baseline_variants": baseline_variants,
         "manifest": manifest,
     }

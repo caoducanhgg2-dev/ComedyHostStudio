@@ -2,7 +2,7 @@ name: Build SRT Voice Studio 1.4 ZIP Update
 on:
   workflow_dispatch:
   push:
-    branches: ['srt-voice-studio/1.4.0-final-hardening']
+    branches: ['srt-voice-studio/1.4.0-safe-rollback']
     paths:
       - 'SRTVoiceStudio/**'
       - '.github/workflows/srt-voice-studio-1.4-zip-update.yml'
@@ -98,6 +98,16 @@ jobs:
         working-directory: SRTVoiceStudio
         run: python build_tools/check_frozen.py
 
+      - name: Verify all six Aivis voices with actual audio
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'dist/SRTVoiceStudio/SRTVoiceStudio.exe').Path
+          foreach ($mode in @('--install-voice-test','--optional-voices-test')) {
+            $p = Start-Process -FilePath $exe -ArgumentList $mode -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Aivis acceptance failed: $mode" }
+          }
+
       - name: Download exact verified 1.3.0 installer artifact
         uses: actions/download-artifact@v4
         with:
@@ -178,7 +188,7 @@ jobs:
           import json
           from pathlib import Path
           m=json.loads(Path('update-output/update_manifest.json').read_text('utf-8'))
-          assert m['format']==3
+          assert m['format']==4
           assert m['from_version']=='1.3.1' and m['to_version']=='1.4.0'
           assert m['stats']['alternate_baseline_count']==1
           assert len(m['baseline_variants'])==2
@@ -224,22 +234,15 @@ jobs:
           if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Updated executable is missing.' }
           if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'ZIP update removed installer-managed uninstaller.' }
 
-          $lastUpdate = Join-Path $env:LOCALAPPDATA 'SRTVoiceStudio\updates\last-update.json'
-          if (-not (Test-Path -LiteralPath $lastUpdate)) { throw 'Persistent rollback audit was not created.' }
-          $audit = Get-Content -LiteralPath $lastUpdate -Raw -Encoding UTF8 | ConvertFrom-Json
-          if (-not [bool]$audit.rollback_available) { throw 'Persistent rollback was not marked available.' }
-          if (-not [bool]$audit.exact_installed_baseline_saved) { throw 'Exact installed baseline was not preserved.' }
-          if (-not (Test-Path -LiteralPath ([string]$audit.rollback_manifest))) { throw 'Persistent rollback manifest is missing.' }
-
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.4 rollback exited with $LASTEXITCODE" }
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.3.1') { throw "Rollback did not restore registry version: $($info.DisplayVersion)" }
-
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.4 reapply exited with $LASTEXITCODE" }
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.4.0') { throw "Reapply did not restore 1.4.0: $($info.DisplayVersion)" }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Restore_Previous.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw 'Registry restore failed' }
+          $info = Get-ItemProperty $reg
+          if ($info.DisplayVersion -ne '1.3.1') { throw 'Previous registry version not restored' }
+          $p = Start-Process -FilePath (Join-Path $info.InstallLocation 'SRTVoiceStudio.exe') -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Restored old app self-test failed' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw 'Reapply failed' }
+          if ((Get-ItemProperty $reg).DisplayVersion -ne '1.4.0') { throw 'Reapply registry version failed' }
 
       - name: Final ZIP checksum and acceptance summary
         working-directory: SRTVoiceStudio

@@ -19,7 +19,7 @@ LICENSE_NOTICE=('Gói Aivis Nhật gồm Mao, Kohaku và 4 giọng mở rộng. 
     'không phải điểm chất lượng nghe. Tất cả 6 model trong gói này dùng ACML 1.0; thương mại có điều kiện, '
     'có các giới hạn về mạo danh, lừa dối, công kích/phê phán cá nhân, tổ chức hoặc sản phẩm có thật. '
     'Đọc điều khoản đầy đủ trước khi dùng cho nội dung review/comedy. Engine LGPL-3.0; BERT CC-BY-SA-4.0. '
-    'Lần cài mới tải khoảng 2,4 GB; máy đã có gói Mao/Kohaku chỉ tải thêm các model còn thiếu.')
+    'Chọn giọng cần tải bên dưới. Engine và bộ ngôn ngữ dùng chung chỉ tải một lần; model đã có được giữ nguyên.')
 
 # Pinned AIVMX assets. Size and SHA-256 come from the AivisHub AIVMX metadata.
 MODEL_PACKS=(
@@ -33,14 +33,26 @@ MODEL_PACKS=(
 
 EXTRA_VOICES=(
     dict(model='f5017410-fbb5-49e1-97cb-e785f42e15f5',speaker='d2c99ca6-73e5-486c-994e-ee0ce2d74928',
-         name='Rinne El — Nữ · Trẻ, sáng, giàu cảm xúc',styles=(('Tự nhiên','ノーマル'),('Giận dữ','Angry'),('Lo lắng','Fear'),('Vui vẻ','Happy'),('Buồn','Sad'))),
+         name='Rinne El — Nữ · Trẻ, 5 phong cách bản địa',styles=(('Tự nhiên','ノーマル'),('Giận dữ','Angry'),('Lo lắng','Fear'),('Vui vẻ','Happy'),('Buồn','Sad'))),
     dict(model='47e53151-a378-46f3-abee-ce13aa07feb1',speaker='561e4e59-3bc9-4726-9028-44a3c12a6f1d',
-         name='Aida Shigeru — Nam · Baritone, trung niên, kể chuyện',styles=(('Tự nhiên','ノーマル'),('Điềm tĩnh','Calm'),('Xa mic','Far'),('Nặng / dày','Heavy'),('Trung tính','Mid'),('Hô lớn','Shout'),('Ngạc nhiên','Surprise'))),
+         name='Aida Shigeru — Nam · Baritone, trung niên',styles=(('Tự nhiên','ノーマル'),('Điềm tĩnh','Calm'),('Xa mic','Far'),('Nặng / dày','Heavy'),('Trung tính','Mid'),('Hô lớn','Shout'),('Ngạc nhiên','Surprise'))),
     dict(model='e9339137-2ae3-4d41-9394-fb757a7e61e6',speaker='41b7785f-35cc-4089-a360-dd8a63da5e75',
-         name='Mai — Nữ · Trẻ, mềm, biểu cảm',styles=(('Tự nhiên','ノーマル'),)),
+         name='Mai — Nữ · Trẻ, một phong cách tự nhiên',styles=(('Tự nhiên','ノーマル'),)),
     dict(model='6d11c6c2-f4a4-4435-887e-23dd60f8b8dd',speaker='bf56410a-d8e6-430d-a477-f789e16206d3',
-         name='Nise — Nam · Trẻ, tự nhiên, hội thoại',styles=(('Tự nhiên','ノーマル'),)),
+         name='Nise — Nam · Trẻ, một phong cách tự nhiên',styles=(('Tự nhiên','ノーマル'),)),
 )
+
+MODEL_NAMES = {
+    MODEL_PACKS[0][0]: 'Mao', MODEL_PACKS[1][0]: 'Kohaku',
+    **{v['model']: v['name'].split(' — ', 1)[0] for v in EXTRA_VOICES},
+}
+
+def selected_packs(model_ids=None):
+    selected = set(MODEL_NAMES if model_ids is None else model_ids)
+    if not selected or selected - set(MODEL_NAMES):
+        raise ValueError('Chọn ít nhất một giọng Nhật hợp lệ.')
+    return [p for p in packs() if not p.filename.endswith('.aivmx')
+            or p.filename.removesuffix('.aivmx') in selected]
 
 def engine_data_root():
     import ctypes
@@ -96,16 +108,19 @@ class AivisPack:
             marker=self.marker()
             return marker.get('layout',0)>=2 and Path(marker['engine']).is_file() and all(Path(p).is_file() for p in marker['model_files'])
         except (KeyError,TypeError):return False
-    def complete(self):
-        if not self.available() or self.marker().get('layout',0)<3:return False
+    def complete(self,model_ids=None):
+        if not self.available():return False
         try:
             models=engine_data_root()/'Models'
-            return all((models/(uid+'.aivmx')).is_file() for uid,_,_,_ in MODEL_PACKS)
+            return all((models/p.filename).is_file() for p in selected_packs(model_ids)
+                       if p.filename.endswith('.aivmx'))
         except Exception:return False
-    def install(self,cancel,progress=lambda *_:None):
+    def download_size(self,model_ids=None):
+        return sum(p.size for p in selected_packs(model_ids) if not self.manager.installed(p))
+    def install(self,cancel,progress=lambda *_:None,model_ids=None):
         if os.name!='nt':raise RuntimeError('Gói cài tự động này dành cho Windows x64.')
-        if self.complete():return self.runtime
-        files=packs();total=sum(p.size for p in files);done=0;locations=[]
+        if self.complete(model_ids):return self.runtime
+        files=selected_packs(model_ids);total=sum(p.size for p in files);done=0;locations=[]
         for p in files:
             locations.append(self.manager.install(p,cancel,lambda n,_,base=done:progress(base+n,total,'Đang tải gói giọng Nhật và kiểm tra SHA-256')))
             done+=p.size
@@ -115,22 +130,25 @@ class AivisPack:
         if self.engine:self.engine.close()
         data=engine_data_root();models=data/'Models'
         bert=data/'BertModelCaches/models--tsukumijima--deberta-v2-large-japanese-char-wwm-onnx/snapshots'/BERT_REVISION
-        installed=[]
+        installed=[p for p in self.marker().get('model_files',[]) if Path(p).is_file()]
         for p,location in zip(files[1:],locations[1:]):
             destination=(models if p.filename.endswith('.aivmx') else bert)/p.filename
             install_shared_file(location/p.filename,destination,p.sha256,cancel);installed.append(str(destination))
         self.runtime.mkdir(parents=True,exist_ok=True)
         marker=self.runtime/'ready.tmp'
-        marker.write_text(json.dumps({'engine':str(executable),'version':'1.2.0','layout':3,'model_data':str(data),'model_files':installed}),encoding='utf-8')
+        marker.write_text(json.dumps({'engine':str(executable),'version':'1.2.0','layout':3,'model_data':str(data),'model_files':list(dict.fromkeys(installed))}),encoding='utf-8')
         check_cancel(cancel);os.replace(marker,self.runtime/'ready.json')
         return self.runtime
     def backend(self):
         if not self.available():return None
         metadata=self.marker();self.engine=LocalEngine(metadata['engine'],self.runtime/'data')
         voices=[]
+        models=engine_data_root()/'Models'
         for uid,name,base,styles in [
             ('e756b8e4-b606-4e15-99b1-3f9c6a1b2317','Mao — Nữ · Tự nhiên, mềm, hội thoại đời thường',888753760,['Tự nhiên','Đời thường','Ngọt ngào','Điềm tĩnh','Trêu đùa','Man mác buồn']),
             ('5680ac39-43c9-487a-bc3e-018c0d29cc38','Kohaku — Nữ · Nhẹ, ngọt, thư giãn',1878365376,['Tự nhiên','Ngọt ngào','Man mác buồn','Buồn ngủ'])]:
+            model_uid=MODEL_PACKS[0 if uid=='e756b8e4-b606-4e15-99b1-3f9c6a1b2317' else 1][0]
+            if not (models/(model_uid+'.aivmx')).is_file():continue
             voices.append(VoiceInfo('aivis:'+uid,name,'Japanese','Aivis',uid,base,tuple(dict(id=base+i,name=s) for i,s in enumerate(styles)),'ACML-1.0 • Thương mại có điều kiện',LICENSE_URL))
         try:models=engine_data_root()/'Models'
         except Exception:models=None
@@ -141,3 +159,4 @@ class AivisPack:
         return LocalVoicevoxBackend('Aivis',10103,voices,self.engine.start)
     def close(self):
         if self.engine:self.engine.close()
+

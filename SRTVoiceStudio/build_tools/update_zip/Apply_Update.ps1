@@ -1,314 +1,102 @@
-Param(
-    [string]$TargetDir = "",
-    [switch]$SkipRegistry,
-    [switch]$NonInteractive
-)
-
-$ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
-
-$PackageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ManifestPath = Join-Path $PackageRoot "update_manifest.json"
-if (-not (Test-Path -LiteralPath $ManifestPath)) {
-    throw "Missing update_manifest.json"
-}
-$Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$RegPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1"
-$AuditDir = Join-Path $env:LOCALAPPDATA "SRTVoiceStudio\updates"
-
-function Get-Sha256([string]$Path) {
-    $Stream = [System.IO.File]::OpenRead($Path)
-    try {
-        $Sha = [System.Security.Cryptography.SHA256]::Create()
-        try {
-            $Hash = $Sha.ComputeHash($Stream)
-            return (([System.BitConverter]::ToString($Hash)) -replace "-", "").ToLowerInvariant()
-        }
-        finally {
-            $Sha.Dispose()
-        }
-    }
-    finally {
-        $Stream.Dispose()
-    }
-}
-
-function Get-AcceptedOldHashes($Item) {
-    $Values = New-Object System.Collections.Generic.List[string]
-    $Names = @($Item.PSObject.Properties.Name)
-    if (($Names -contains "old_sha256") -and ($null -ne $Item.old_sha256)) {
-        $Value = ([string]$Item.old_sha256).Trim().ToLowerInvariant()
-        if (-not [string]::IsNullOrWhiteSpace($Value)) { $Values.Add($Value) }
-    }
-    if (($Names -contains "old_sha256_variants") -and ($null -ne $Item.old_sha256_variants)) {
-        foreach ($Candidate in @($Item.old_sha256_variants)) {
-            if ($null -eq $Candidate) { continue }
-            $Value = ([string]$Candidate).Trim().ToLowerInvariant()
-            if ((-not [string]::IsNullOrWhiteSpace($Value)) -and (-not $Values.Contains($Value))) {
-                $Values.Add($Value)
-            }
-        }
-    }
-    return @($Values)
-}
-
-if ([string]::IsNullOrWhiteSpace($TargetDir)) {
-    if ((-not $SkipRegistry) -and (Test-Path $RegPath)) {
-        $TargetDir = [string](Get-ItemProperty -Path $RegPath -Name InstallLocation).InstallLocation
-    }
-    if ([string]::IsNullOrWhiteSpace($TargetDir)) {
-        $TargetDir = Join-Path $env:LOCALAPPDATA "Programs\SRTVoiceStudio"
-    }
-}
-$TargetDir = [IO.Path]::GetFullPath($TargetDir)
-$Exe = Join-Path $TargetDir "SRTVoiceStudio.exe"
-if (-not (Test-Path -LiteralPath $Exe)) {
-    throw "SRTVoiceStudio.exe was not found in: $TargetDir"
-}
-
-$OldRegistryVersion = $null
-if ((-not $SkipRegistry) -and (Test-Path $RegPath)) {
-    $OldRegistryVersion = [string](Get-ItemProperty -Path $RegPath -Name DisplayVersion).DisplayVersion
-    if (($OldRegistryVersion -ne [string]$Manifest.from_version) -and
-        ($OldRegistryVersion -ne [string]$Manifest.to_version)) {
-        throw "Installed version is $OldRegistryVersion. This package only updates $($Manifest.from_version) to $($Manifest.to_version)."
-    }
-}
-
-$Running = @(Get-Process -Name "SRTVoiceStudio" -ErrorAction SilentlyContinue)
-if ($Running.Count -gt 0) {
-    if ($NonInteractive) {
-        throw "SRT Voice Studio is running. Close it before updating."
-    }
-    Write-Host "Close SRT Voice Studio, then press Enter to continue."
-    [void](Read-Host)
-    $Running = @(Get-Process -Name "SRTVoiceStudio" -ErrorAction SilentlyContinue)
-    if ($Running.Count -gt 0) {
-        throw "SRT Voice Studio is still running."
-    }
-}
-
-# Build and validate the complete plan before writing anything. Each file may
-# accept more than one released 1.3.1 hash, but arbitrary modified bytes remain
-# rejected. The exact hash found on this machine is saved for rollback.
-$Plan = @()
-foreach ($Item in @($Manifest.files)) {
-    $Relative = [string]$Item.path
-    $Native = $Relative -replace "/", "\"
-    $Dest = Join-Path $TargetDir $Native
-    $Payload = Join-Path (Join-Path $PackageRoot "payload") $Native
-    $NewSha = ([string]$Item.sha256).ToLowerInvariant()
-    $AcceptedOld = @(Get-AcceptedOldHashes $Item)
-    if (-not (Test-Path -LiteralPath $Payload)) {
-        throw "Missing payload: $Relative"
-    }
-    if ((Get-Sha256 $Payload) -ne $NewSha) {
-        throw "Payload checksum mismatch: $Relative"
-    }
-
-    $ActualOldSha = $null
-    if (Test-Path -LiteralPath $Dest) {
-        $CurrentHash = Get-Sha256 $Dest
-        if ($CurrentHash -eq $NewSha) {
-            $State = "already-new"
-        } elseif ($AcceptedOld -contains $CurrentHash) {
-            $State = "replace"
-            $ActualOldSha = $CurrentHash
-        } else {
-            $Known = if ($AcceptedOld.Count) { $AcceptedOld -join ", " } else { "<new file expected>" }
-            throw "Baseline checksum mismatch; update stopped before overwrite: $Relative`nInstalled: $CurrentHash`nAccepted: $Known"
-        }
-    } else {
-        if ($AcceptedOld.Count -gt 0) {
-            throw "Baseline file is missing: $Relative"
-        }
-        $State = "add"
-    }
-    $Plan += [pscustomobject]@{
-        Kind = "file"
-        State = $State
-        Relative = $Relative
-        Dest = $Dest
-        Payload = $Payload
-        OldSha = $ActualOldSha
-        NewSha = $NewSha
-    }
-}
-
-foreach ($Item in @($Manifest.delete)) {
-    $Relative = [string]$Item.path
-    $Dest = Join-Path $TargetDir ($Relative -replace "/", "\")
-    $AcceptedOld = @(Get-AcceptedOldHashes $Item)
-    $ActualOldSha = $null
-    if (-not (Test-Path -LiteralPath $Dest)) {
-        $State = "already-deleted"
-    } else {
-        $CurrentHash = Get-Sha256 $Dest
-        if (-not ($AcceptedOld -contains $CurrentHash)) {
-            $Known = if ($AcceptedOld.Count) { $AcceptedOld -join ", " } else { "<none>" }
-            throw "Old file checksum mismatch; delete stopped: $Relative`nInstalled: $CurrentHash`nAccepted: $Known"
-        }
-        $State = "delete"
-        $ActualOldSha = $CurrentHash
-    }
-    $Plan += [pscustomobject]@{
-        Kind = "delete"
-        State = $State
-        Relative = $Relative
-        Dest = $Dest
-        Payload = $null
-        OldSha = $ActualOldSha
-        NewSha = $null
-    }
-}
-
-$ChangesNeeded = @($Plan | Where-Object { $_.State -in @("replace", "add", "delete") }).Count -gt 0
-$TransactionBackup = Join-Path $env:TEMP ("SRTVoiceStudio-update-backup-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Force -Path $TransactionBackup | Out-Null
-$Undo = @()
-$RegistryChanged = $false
-$PersistentBackupRoot = $null
-$RollbackEntries = @()
-
+Param([string]$TargetDir = '', [switch]$SkipRegistry, [switch]$NonInteractive)
+. (Join-Path $PSScriptRoot 'Update_Common.ps1')
+$TargetDir = Resolve-Target $TargetDir ([bool]$SkipRegistry)
+Assert-AppClosed
+$history = History-Root $TargetDir
+$lock = [IO.File]::Open((Join-Path $history 'update.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
 try {
-    if ($ChangesNeeded) {
-        New-Item -ItemType Directory -Force -Path $AuditDir | Out-Null
-        $Stamp = (Get-Date).ToString("yyyyMMdd-HHmmssfff")
-        $PersistentBackupRoot = Join-Path $AuditDir ("rollback-$($Manifest.from_version)-before-$($Manifest.to_version)-$Stamp-" + [guid]::NewGuid().ToString("N").Substring(0,8))
-        New-Item -ItemType Directory -Force -Path (Join-Path $PersistentBackupRoot "files") | Out-Null
-    }
-
-    foreach ($Entry in $Plan) {
-        if (($Entry.State -eq "already-new") -or ($Entry.State -eq "already-deleted")) {
-            continue
-        }
-
-        $TransactionFile = Join-Path $TransactionBackup ($Entry.Relative -replace "/", "\")
-        if (($Entry.State -eq "replace") -or ($Entry.State -eq "delete")) {
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $TransactionFile) | Out-Null
-            Copy-Item -LiteralPath $Entry.Dest -Destination $TransactionFile -Force
-            $Undo += [pscustomobject]@{ Action = "restore"; Dest = $Entry.Dest; Backup = $TransactionFile }
-
-            # Verify again before copying to the persistent rollback snapshot so
-            # rollback metadata always describes the exact bytes actually saved.
-            $BeforeWriteHash = Get-Sha256 $Entry.Dest
-            if ($BeforeWriteHash -ne $Entry.OldSha) {
-                throw "Baseline changed after preflight; update stopped: $($Entry.Relative)"
-            }
-            $PersistentFile = Join-Path (Join-Path $PersistentBackupRoot "files") ($Entry.Relative -replace "/", "\")
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PersistentFile) | Out-Null
-            Copy-Item -LiteralPath $Entry.Dest -Destination $PersistentFile -Force
-            if ((Get-Sha256 $PersistentFile) -ne $Entry.OldSha) {
-                throw "Persistent rollback backup verification failed: $($Entry.Relative)"
-            }
-            $RollbackEntries += [ordered]@{
-                action = "restore"
-                path = $Entry.Relative
-                backup = "files/$($Entry.Relative)"
-                old_sha256 = $Entry.OldSha
-                new_sha256 = $Entry.NewSha
-            }
-        } elseif ($Entry.State -eq "add") {
-            $Undo += [pscustomobject]@{ Action = "remove"; Dest = $Entry.Dest; Backup = $null }
-            $RollbackEntries += [ordered]@{
-                action = "remove"
-                path = $Entry.Relative
-                backup = $null
-                old_sha256 = $null
-                new_sha256 = $Entry.NewSha
-            }
-        }
-
-        if ($Entry.Kind -eq "delete") {
-            Remove-Item -LiteralPath $Entry.Dest -Force
-            continue
-        }
-
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Entry.Dest) | Out-Null
-        Copy-Item -LiteralPath $Entry.Payload -Destination $Entry.Dest -Force
-    }
-
-    foreach ($Item in @($Manifest.files)) {
-        $Dest = Join-Path $TargetDir (([string]$Item.path) -replace "/", "\")
-        if ((-not (Test-Path -LiteralPath $Dest)) -or
-            ((Get-Sha256 $Dest) -ne ([string]$Item.sha256).ToLowerInvariant())) {
-            throw "Post-update verification failed: $($Item.path)"
+    $pointer = Join-Path $history 'latest.json'
+    if (Test-Path -LiteralPath $pointer) {
+        $previous = Get-Content -LiteralPath $pointer -Raw -Encoding UTF8 | ConvertFrom-Json
+        $pending = Get-Content -LiteralPath $previous.journal -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($pending.state -in @('applying','restoring')) {
+            Restore-Journal $previous.journal $TargetDir
+            throw 'Interrupted update restored. Open the old app or run the update again.'
         }
     }
-    foreach ($Item in @($Manifest.delete)) {
-        $Dest = Join-Path $TargetDir (([string]$Item.path) -replace "/", "\")
-        if (Test-Path -LiteralPath $Dest) {
-            throw "Old file still exists after update: $($Item.path)"
+    $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'update_manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath (Join-Path $TargetDir 'SRTVoiceStudio.exe') -PathType Leaf)) { throw 'Installed app executable not found. Use Restore_Previous.cmd if a prior update was interrupted.' }
+    if ($manifest.format -ne 4 -or $manifest.product -ne 'SRT Voice Studio' -or
+        $manifest.app_id -ne '{68F0C1C1-17CB-4CED-8261-5C18EB92571A}') { throw 'Unsupported update package.' }
+    $registryUsed = (-not $SkipRegistry) -and (Test-Path $RegPath)
+    $oldVersion = [string]$manifest.from_version
+    if ($registryUsed) {
+        $oldVersion = [string](Get-ItemProperty $RegPath).DisplayVersion
+        if ($oldVersion -notin @($manifest.from_version,$manifest.to_version)) { throw 'Wrong installed version. No files changed.' }
+    }
+    $plan = @(); $seen = @{}; $already = 0
+    foreach ($e in @($manifest.files) + @($manifest.delete)) {
+        $rel = [string]$e.path
+        if ($seen.ContainsKey($rel)) { throw 'Duplicate package path.' }; $seen[$rel] = $true
+        if ($rel -match '^unins[^/]*$') { throw 'Package must preserve the uninstaller.' }
+        $dest = Safe-Path $TargetDir $rel
+        $isDelete = -not ($e.PSObject.Properties.Name -contains 'sha256')
+        $newHash = $null; $payload = $null
+        if (-not $isDelete) {
+            $payload = Safe-Path (Join-Path $PSScriptRoot 'payload') $rel
+            $newHash = [string]$e.sha256
+            if ((Get-Sha256 $payload) -ne $newHash -or (Get-Item -LiteralPath $payload).Length -ne $e.size) { throw "Bad payload: $rel" }
+        }
+        $hash = if (Test-Path -LiteralPath $dest) { Get-Sha256 $dest } else { $null }
+        if ($hash -eq $newHash) { $already++; continue }
+        $accepted = @($e.old_sha256)
+        if ($e.PSObject.Properties.Name -contains 'old_sha256_variants') { $accepted += @($e.old_sha256_variants) }
+        if ($hash -notin $accepted) { throw "Baseline checksum mismatch: $rel. No files changed." }
+        $plan += [pscustomobject]@{path=$rel;old_sha256=$hash;new_sha256=$newHash;payload=$payload}
+    }
+    if ($plan.Count -eq 0) { Write-Host 'This update is already installed. Existing backup preserved.'; return }
+    # A known baseline can already contain target bytes for files that only
+    # differ in another verified baseline variant. Preserve them unchanged.
+    if ($oldVersion -eq $manifest.to_version) { throw 'Version and file hashes disagree. Restore the previous update first.' }
+    $backup = Join-Path $history ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $backup | Out-Null
+    foreach ($e in $plan) {
+        if ($e.old_sha256) {
+            $saved = Safe-Path (Join-Path $backup 'files') $e.path
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $saved) | Out-Null
+            Copy-Item -LiteralPath (Safe-Path $TargetDir $e.path) -Destination $saved
+            if ((Get-Sha256 $saved) -ne $e.old_sha256) { throw 'Backup verification failed. Installed app unchanged.' }
         }
     }
-
-    if ($ChangesNeeded) {
-        $RollbackManifest = [ordered]@{
-            format = 2
-            product = [string]$Manifest.product
-            from_version = [string]$Manifest.from_version
-            to_version = [string]$Manifest.to_version
-            created_at = (Get-Date).ToString("o")
-            target = $TargetDir
-            exact_installed_old_hashes = $true
-            entries = @($RollbackEntries)
+    foreach ($name in @('Restore_Previous.cmd','Restore_Previous.ps1','Update_Common.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $backup $name)
+    }
+    $journalPath = Join-Path $backup 'journal.json'
+    $journal = [ordered]@{target=$TargetDir;old_version=$oldVersion;new_version=[string]$manifest.to_version;registry_used=$registryUsed;state='applying';entries=$plan}
+    Save-Json $journalPath $journal
+    Save-Json $pointer @{journal=$journalPath}
+    try {
+        foreach ($e in $plan) {
+            $dest = Safe-Path $TargetDir $e.path
+            if ($e.new_sha256) {
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+                Copy-Item -LiteralPath $e.payload -Destination $dest -Force
+                if ((Get-Sha256 $dest) -ne $e.new_sha256) { throw 'Post-update checksum failed.' }
+            } else { Remove-Item -LiteralPath $dest -Force }
         }
-        $RollbackManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PersistentBackupRoot "rollback_manifest.json") -Encoding UTF8
+        # Check the actual frozen application in isolated settings, without editing user data.
+        $psi = New-Object Diagnostics.ProcessStartInfo
+        $psi.FileName = Join-Path $TargetDir 'SRTVoiceStudio.exe'
+        $psi.Arguments = '--update-health-check'
+        $psi.WorkingDirectory = $TargetDir
+        $psi.UseShellExecute = $false
+        $psi.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $backup 'health-check'
+        $process = [Diagnostics.Process]::Start($psi)
+        if (-not $process.WaitForExit(300000)) { $process.Kill(); $process.WaitForExit(); throw 'New app health check timed out.' }
+        if ($process.ExitCode -ne 0) { throw "New app health check failed: $($process.ExitCode)" }
+        $report = Join-Path $backup 'health-check\SRTVoiceStudio\update-health.json'
+        if (-not (Test-Path -LiteralPath $report)) { throw 'New app did not produce its health report.' }
+        $health = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $health.passed -or $health.version -ne $manifest.to_version) { throw 'Health report version or result is invalid.' }
+        if ($registryUsed) { Set-ItemProperty $RegPath -Name DisplayVersion -Value ([string]$manifest.to_version) }
+        $journal.state = 'applied'; Save-Json $journalPath $journal
+        Write-Host "UPDATE SUCCESS: $($manifest.to_version)"
+        Write-Host "Backup retained: $backup"
+        Write-Host 'If a problem appears later, close the app and run Restore_Previous.cmd.'
+    } catch {
+        $failure = $_
+        try { Restore-Journal $journalPath $TargetDir; Write-Host 'Previous version restored.' }
+        catch { Write-Error "Automatic restore failed. Backup retained at $backup. Run its Restore_Previous.cmd. $_" -ErrorAction Continue }
+        throw $failure
     }
-
-    if ((-not $SkipRegistry) -and (Test-Path $RegPath)) {
-        Set-ItemProperty -Path $RegPath -Name DisplayVersion -Value ([string]$Manifest.to_version)
-        $RegistryChanged = $true
-    }
-
-    if ($ChangesNeeded) {
-        New-Item -ItemType Directory -Force -Path $AuditDir | Out-Null
-        [ordered]@{
-            product = [string]$Manifest.product
-            from_version = [string]$Manifest.from_version
-            to_version = [string]$Manifest.to_version
-            applied_at = (Get-Date).ToString("o")
-            target = $TargetDir
-            changed_files = @($Manifest.files).Count
-            deleted_files = @($Manifest.delete).Count
-            rollback_available = $true
-            rollback_dir = $PersistentBackupRoot
-            rollback_manifest = (Join-Path $PersistentBackupRoot "rollback_manifest.json")
-            exact_installed_baseline_saved = $true
-        } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $AuditDir "last-update.json") -Encoding UTF8
-    }
-
-    Write-Host ""
-    if ($ChangesNeeded) {
-        Write-Host "UPDATE SUCCESS: SRT Voice Studio $($Manifest.to_version)"
-        Write-Host "Rollback snapshot: $PersistentBackupRoot"
-        Write-Host "Use Rollback_Update.cmd from this ZIP if you need to restore $($Manifest.from_version)."
-    } else {
-        Write-Host "UPDATE ALREADY APPLIED: SRT Voice Studio $($Manifest.to_version)"
-        Write-Host "Existing rollback snapshot was preserved."
-    }
-    Write-Host "No installer EXE was run. User data was preserved."
-}
-catch {
-    if ($RegistryChanged -and ($null -ne $OldRegistryVersion) -and (Test-Path $RegPath)) {
-        try { Set-ItemProperty -Path $RegPath -Name DisplayVersion -Value $OldRegistryVersion } catch {}
-    }
-    for ($i = $Undo.Count - 1; $i -ge 0; $i--) {
-        $Step = $Undo[$i]
-        try {
-            if ($Step.Action -eq "restore") {
-                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Step.Dest) | Out-Null
-                Copy-Item -LiteralPath $Step.Backup -Destination $Step.Dest -Force
-            } elseif ($Step.Action -eq "remove") {
-                Remove-Item -LiteralPath $Step.Dest -Force -ErrorAction SilentlyContinue
-            }
-        } catch {}
-    }
-    if (($null -ne $PersistentBackupRoot) -and (Test-Path -LiteralPath $PersistentBackupRoot)) {
-        Remove-Item -LiteralPath $PersistentBackupRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    throw
-}
-finally {
-    Remove-Item -LiteralPath $TransactionBackup -Recurse -Force -ErrorAction SilentlyContinue
-}
+} finally { $lock.Dispose() }

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -53,10 +53,7 @@ def assert_patched_install(target: Path, baseline: Path, current: Path) -> tuple
     return True, len(preserved)
 
 
-def run_ps1(script: Path, target: Path, local_appdata: Path, expect_success: bool) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    env["LOCALAPPDATA"] = str(local_appdata)
-    local_appdata.mkdir(parents=True, exist_ok=True)
+def run_update(package_root: Path, target: Path, expect_success: bool) -> subprocess.CompletedProcess[str]:
     command = [
         "powershell.exe",
         "-NoLogo",
@@ -64,28 +61,33 @@ def run_ps1(script: Path, target: Path, local_appdata: Path, expect_success: boo
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        str(script),
+        str(package_root / "Apply_Update.ps1"),
         "-TargetDir",
         str(target),
         "-SkipRegistry",
         "-NonInteractive",
     ]
-    result = subprocess.run(command, text=True, capture_output=True, timeout=300, env=env)
+    result = subprocess.run(command, text=True, capture_output=True, timeout=420)
     print(result.stdout)
     print(result.stderr)
     if expect_success and result.returncode != 0:
-        raise RuntimeError(f"{script.name} failed with {result.returncode}")
+        raise RuntimeError(f"Updater failed with {result.returncode}")
     if not expect_success and result.returncode == 0:
-        raise RuntimeError(f"{script.name} unexpectedly succeeded")
+        raise RuntimeError("Updater unexpectedly accepted a corrupted baseline")
     return result
 
 
-def run_update(package_root: Path, target: Path, local_appdata: Path, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
-    return run_ps1(package_root / "Apply_Update.ps1", target, local_appdata, expect_success)
+def journal_for(target):
+    key = hashlib.sha256(str(target).lower().encode('utf-8')).hexdigest().upper()
+    pointer = Path(os.environ['LOCALAPPDATA']) / 'SRTVoiceStudio' / 'updates' / key / 'latest.json'
+    return Path(json.loads(pointer.read_text('utf-8-sig'))['journal'])
 
-
-def run_rollback(package_root: Path, target: Path, local_appdata: Path) -> subprocess.CompletedProcess[str]:
-    return run_ps1(package_root / "Rollback_Update.ps1", target, local_appdata, True)
+def restore(package_root, target, success=True):
+    result = subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass',
+        '-File',str(package_root/'Restore_Previous.ps1'),'-TargetDir',str(target),
+        '-SkipRegistry','-NonInteractive'],capture_output=True,text=True,timeout=120)
+    if (result.returncode == 0) != success:
+        raise RuntimeError(f'Restore unexpected result: {result.stdout} {result.stderr}')
 
 
 def main() -> int:
@@ -107,108 +109,86 @@ def main() -> int:
         with zipfile.ZipFile(package) as archive:
             archive.extractall(package_root)
         manifest = json.loads((package_root / "update_manifest.json").read_text("utf-8"))
-        for tool in ("Apply_Update.ps1", "Apply_Update.cmd", "Rollback_Update.ps1", "Rollback_Update.cmd"):
-            if not (package_root / tool).is_file():
-                raise RuntimeError(f"Update package is missing {tool}")
-
-        alternate_baseline_count = int(manifest.get("stats", {}).get("alternate_baseline_count", 0))
-        baseline_variants = manifest.get("baseline_variants", [])
-        if alternate_baseline_count:
-            if len(baseline_variants) != alternate_baseline_count + 1:
-                raise RuntimeError("Manifest baseline_variants count is inconsistent")
-            files_with_alternate_hashes = [
-                item for item in manifest["files"]
-                if item.get("old_sha256_variants")
-            ]
-            if not files_with_alternate_hashes:
-                raise RuntimeError("Alternate baseline declared but no alternate file hashes were packaged")
-            for item in files_with_alternate_hashes:
-                hashes = [str(v).lower() for v in item["old_sha256_variants"]]
-                if len(hashes) != len(set(hashes)) or any(len(v) != 64 for v in hashes):
-                    raise RuntimeError(f"Invalid alternate baseline hashes: {item['path']}")
-        else:
-            files_with_alternate_hashes = []
 
         target = work / "LỒNG TIẾNG" / "SRT Voice Studio"
-        local_appdata = work / "LocalAppData"
         shutil.copytree(baseline, target)
-
-        run_update(package_root, target, local_appdata)
+        run_update(package_root, target, expect_success=True)
         exact_app_match, preserved_installer_files = assert_patched_install(target, baseline, current)
 
-        last_update_path = local_appdata / "SRTVoiceStudio" / "updates" / "last-update.json"
-        if not last_update_path.is_file():
-            raise RuntimeError("Persistent rollback audit record was not created")
-        last_update = json.loads(last_update_path.read_text("utf-8-sig"))
-        rollback_manifest = Path(last_update["rollback_manifest"])
-        persistent_rollback_snapshot = bool(last_update.get("rollback_available")) and rollback_manifest.is_file()
-        if not persistent_rollback_snapshot:
-            raise RuntimeError("Persistent rollback snapshot is unavailable after a successful update")
-        if last_update.get("exact_installed_baseline_saved") is not True:
-            raise RuntimeError("Updater did not record exact installed baseline preservation")
-        rollback_data = json.loads(rollback_manifest.read_text("utf-8-sig"))
-        if rollback_data.get("exact_installed_old_hashes") is not True:
-            raise RuntimeError("Rollback manifest does not certify exact installed old hashes")
-
-        run_rollback(package_root, target, local_appdata)
-        rollback_exact_baseline = inventory(target) == inventory(baseline)
-        if not rollback_exact_baseline:
-            raise RuntimeError("Persistent rollback did not restore the exact baseline")
-
-        rolled_audit = json.loads(last_update_path.read_text("utf-8-sig"))
-        if rolled_audit.get("rollback_available") is not False:
-            raise RuntimeError("Rollback audit did not mark the snapshot as consumed")
-
-        run_update(package_root, target, local_appdata)
-        reapply_after_rollback = assert_patched_install(target, baseline, current)[0]
-
         first_pass = inventory(target)
-        last_update_before_idempotent = last_update_path.read_bytes()
-        run_update(package_root, target, local_appdata)
+        run_update(package_root, target, expect_success=True)
         idempotent = inventory(target) == first_pass
-        rollback_record_preserved_on_idempotent = last_update_path.read_bytes() == last_update_before_idempotent
         if not idempotent:
             raise RuntimeError("Second update application changed the verified result")
-        if not rollback_record_preserved_on_idempotent:
-            raise RuntimeError("Idempotent update replaced the valid persistent rollback record")
         assert_patched_install(target, baseline, current)
+        journal = journal_for(target)
+        assert journal.is_file(), 'Persistent backup is missing'
+        state = json.loads(journal.read_text('utf-8-sig'))
+        assert state['state'] == 'applied'
+        # Prove a damaged backup is rejected before touching the working app.
+        entry = next(e for e in state['entries'] if e['old_sha256'])
+        saved = journal.parent / 'files' / entry['path']
+        good_bytes = saved.read_bytes(); saved.write_bytes(b'corrupt backup')
+        restore(package_root, target, success=False)
+        assert inventory(target) == first_pass
+        saved.write_bytes(good_bytes)
+        restore(package_root, target)
+        assert inventory(target) == inventory(baseline), 'Manual restore did not recover exact old app'
+        restore(package_root, target)  # Repeat safely.
+        assert inventory(target) == inventory(baseline)
+
+        # All package hashes are valid, but the replacement EXE cannot start.
+        # This exercises rollback AFTER writes, not merely preflight rejection.
+        failing_package = work / 'failing-health'
+        shutil.copytree(package_root, failing_package)
+        failed_manifest = json.loads((failing_package/'update_manifest.json').read_text('utf-8'))
+        exe_entry = next(e for e in failed_manifest['files'] if e['path']=='SRTVoiceStudio.exe')
+        broken_exe = failing_package/'payload/SRTVoiceStudio.exe'
+        broken_exe.write_bytes(b'not an executable: health-check failure test')
+        exe_entry['sha256']=digest(broken_exe); exe_entry['size']=broken_exe.stat().st_size
+        (failing_package/'update_manifest.json').write_text(json.dumps(failed_manifest),encoding='utf-8')
+        run_update(failing_package,target,expect_success=False)
+        assert inventory(target)==inventory(baseline), 'Failed startup did not restore old app'
+        assert json.loads(journal_for(target).read_text('utf-8-sig'))['state']=='restored'
+
+        # Simulate interruption after writes but before success journal commit.
+        run_update(package_root,target,expect_success=True)
+        journal=journal_for(target); state=json.loads(journal.read_text('utf-8-sig'))
+        state['state']='applying'; journal.write_text(json.dumps(state),encoding='utf-8')
+        run_update(package_root,target,expect_success=False)
+        assert inventory(target)==inventory(baseline), 'Interrupted transaction was not recovered'
 
         candidates = [item for item in manifest["files"] if item.get("old_sha256")]
         if not candidates:
             raise RuntimeError("No replaceable file exists for corruption-guard test")
         corrupt = work / "corrupt-baseline"
-        corrupt_local = work / "CorruptLocalAppData"
         shutil.copytree(baseline, corrupt)
         victim = corrupt / Path(candidates[0]["path"])
         with victim.open("ab") as stream:
             stream.write(b"SRTVS-CORRUPTION-GUARD")
         before = inventory(corrupt)
-        run_update(package_root, corrupt, corrupt_local, expect_success=False)
+        run_update(package_root, corrupt, expect_success=False)
         corruption_rejected_without_partial_write = inventory(corrupt) == before
         if not corruption_rejected_without_partial_write:
             raise RuntimeError("Updater modified files after baseline verification failure")
 
     result = {
         "passed": True,
+        "manual_restore_exact": True,
+        "corrupt_backup_rejected_before_write": True,
+        "startup_failure_rollback_exact": True,
+        "interrupted_update_recovery_exact": True,
         "package": package.name,
         "from_version": manifest["from_version"],
         "to_version": manifest["to_version"],
         "baseline_kind": manifest.get("baseline_kind"),
         "baseline_run": manifest.get("baseline_run"),
-        "baseline_variant_count": len(baseline_variants),
-        "alternate_baseline_count": alternate_baseline_count,
-        "files_with_alternate_hashes": len(files_with_alternate_hashes),
         "changed_files": len(manifest["files"]),
         "deleted_files": len(manifest["delete"]),
         "payload_ratio": manifest["stats"]["payload_ratio"],
         "exact_app_match": exact_app_match,
         "preserved_installer_files": preserved_installer_files,
-        "persistent_rollback_snapshot": persistent_rollback_snapshot,
-        "exact_installed_baseline_saved": True,
-        "rollback_exact_baseline": rollback_exact_baseline,
-        "reapply_after_rollback": reapply_after_rollback,
         "idempotent": idempotent,
-        "rollback_record_preserved_on_idempotent": rollback_record_preserved_on_idempotent,
         "corruption_rejected_without_partial_write": corruption_rejected_without_partial_write,
     }
     result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,3 +199,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

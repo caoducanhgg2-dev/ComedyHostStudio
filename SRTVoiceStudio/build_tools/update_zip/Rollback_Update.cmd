@@ -12,3 +12,4 @@ if not "%RC%"=="0" (
 echo Rollback complete. The previous SRT Voice Studio version has been restored.
 pause
 exit /b 0
+

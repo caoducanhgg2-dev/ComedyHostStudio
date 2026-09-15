@@ -104,3 +104,4 @@ Do not label the updater ZIP as verified/final, do not merge to the release bran
 ## Full installer retry
 
 A fresh full-installer build was explicitly retriggered on 2026-09-15 after confirming that the previously distributed artifact was still the old 1.3.0 installer. The target artifact is `SRTVoiceStudio_Setup_1.4.0` from `.github/workflows/srt-voice-studio-windows.yml`; only that artifact should be distributed as the full 1.4 installer.
+

@@ -26,6 +26,9 @@ def main():
     try:
         logging.info('SRT Voice Studio %s', __version__)
         clean_stale()
+        if '--update-health-check' in sys.argv:
+            from studio.update_health import check
+            return check(app)
         for name in ('batch','underfill-v2','install-voice','optional-voices','voice-benchmark'):
             if '--'+name+'-test' in sys.argv:
                 from studio.upgrade_checks import run_test
@@ -48,7 +51,7 @@ def main():
         return app.exec()
     except Exception as exc:
         logging.exception('Startup error')
-        if not any(arg.endswith('-test') for arg in sys.argv):
+        if '--update-health-check' not in sys.argv and not any(arg.endswith('-test') for arg in sys.argv):
             QMessageBox.critical(None, 'Không mở được ứng dụng', str(exc))
         return 1
     finally:
@@ -56,3 +59,4 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+

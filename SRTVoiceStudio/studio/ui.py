@@ -42,7 +42,7 @@ class Worker(QThread):
                 params = dict(self.params); queue = params.pop('queue')
                 result = queue.run(self.backend, **params, update=lambda _: self.queue_update.emit())
             elif self.task == 'install_aivis':
-                result=self.params['pack'].install(self.cancel,self.progress.emit)
+                result=self.params['pack'].install(self.cancel,self.progress.emit,model_ids=self.params.get('model_ids'))
             elif self.task == 'preview':
                 result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
                     progress=lambda msg: self.progress.emit(0, 1, msg))
@@ -600,3 +600,4 @@ class Window(QMainWindow):
             self.preview_cache.clear()
             self.aivis_pack.close()
             event.accept()
+
