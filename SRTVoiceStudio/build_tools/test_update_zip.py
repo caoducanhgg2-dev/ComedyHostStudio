@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -52,7 +53,10 @@ def assert_patched_install(target: Path, baseline: Path, current: Path) -> tuple
     return True, len(preserved)
 
 
-def run_update(package_root: Path, target: Path, expect_success: bool) -> subprocess.CompletedProcess[str]:
+def run_ps1(script: Path, target: Path, local_appdata: Path, expect_success: bool) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = str(local_appdata)
+    local_appdata.mkdir(parents=True, exist_ok=True)
     command = [
         "powershell.exe",
         "-NoLogo",
@@ -60,20 +64,28 @@ def run_update(package_root: Path, target: Path, expect_success: bool) -> subpro
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        str(package_root / "Apply_Update.ps1"),
+        str(script),
         "-TargetDir",
         str(target),
         "-SkipRegistry",
         "-NonInteractive",
     ]
-    result = subprocess.run(command, text=True, capture_output=True, timeout=300)
+    result = subprocess.run(command, text=True, capture_output=True, timeout=300, env=env)
     print(result.stdout)
     print(result.stderr)
     if expect_success and result.returncode != 0:
-        raise RuntimeError(f"Updater failed with {result.returncode}")
+        raise RuntimeError(f"{script.name} failed with {result.returncode}")
     if not expect_success and result.returncode == 0:
-        raise RuntimeError("Updater unexpectedly accepted a corrupted baseline")
+        raise RuntimeError(f"{script.name} unexpectedly succeeded")
     return result
+
+
+def run_update(package_root: Path, target: Path, local_appdata: Path, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
+    return run_ps1(package_root / "Apply_Update.ps1", target, local_appdata, expect_success)
+
+
+def run_rollback(package_root: Path, target: Path, local_appdata: Path) -> subprocess.CompletedProcess[str]:
+    return run_ps1(package_root / "Rollback_Update.ps1", target, local_appdata, True)
 
 
 def main() -> int:
@@ -95,29 +107,60 @@ def main() -> int:
         with zipfile.ZipFile(package) as archive:
             archive.extractall(package_root)
         manifest = json.loads((package_root / "update_manifest.json").read_text("utf-8"))
+        for tool in ("Apply_Update.ps1", "Apply_Update.cmd", "Rollback_Update.ps1", "Rollback_Update.cmd"):
+            if not (package_root / tool).is_file():
+                raise RuntimeError(f"Update package is missing {tool}")
 
         target = work / "LỒNG TIẾNG" / "SRT Voice Studio"
+        local_appdata = work / "LocalAppData"
         shutil.copytree(baseline, target)
-        run_update(package_root, target, expect_success=True)
+
+        run_update(package_root, target, local_appdata)
         exact_app_match, preserved_installer_files = assert_patched_install(target, baseline, current)
 
+        last_update_path = local_appdata / "SRTVoiceStudio" / "updates" / "last-update.json"
+        if not last_update_path.is_file():
+            raise RuntimeError("Persistent rollback audit record was not created")
+        last_update = json.loads(last_update_path.read_text("utf-8-sig"))
+        rollback_manifest = Path(last_update["rollback_manifest"])
+        persistent_rollback_snapshot = bool(last_update.get("rollback_available")) and rollback_manifest.is_file()
+        if not persistent_rollback_snapshot:
+            raise RuntimeError("Persistent rollback snapshot is unavailable after a successful update")
+
+        run_rollback(package_root, target, local_appdata)
+        rollback_exact_baseline = inventory(target) == inventory(baseline)
+        if not rollback_exact_baseline:
+            raise RuntimeError("Persistent rollback did not restore the exact baseline")
+
+        rolled_audit = json.loads(last_update_path.read_text("utf-8-sig"))
+        if rolled_audit.get("rollback_available") is not False:
+            raise RuntimeError("Rollback audit did not mark the snapshot as consumed")
+
+        run_update(package_root, target, local_appdata)
+        reapply_after_rollback = assert_patched_install(target, baseline, current)[0]
+
         first_pass = inventory(target)
-        run_update(package_root, target, expect_success=True)
+        last_update_before_idempotent = last_update_path.read_bytes()
+        run_update(package_root, target, local_appdata)
         idempotent = inventory(target) == first_pass
+        rollback_record_preserved_on_idempotent = last_update_path.read_bytes() == last_update_before_idempotent
         if not idempotent:
             raise RuntimeError("Second update application changed the verified result")
+        if not rollback_record_preserved_on_idempotent:
+            raise RuntimeError("Idempotent update replaced the valid persistent rollback record")
         assert_patched_install(target, baseline, current)
 
         candidates = [item for item in manifest["files"] if item.get("old_sha256")]
         if not candidates:
             raise RuntimeError("No replaceable file exists for corruption-guard test")
         corrupt = work / "corrupt-baseline"
+        corrupt_local = work / "CorruptLocalAppData"
         shutil.copytree(baseline, corrupt)
         victim = corrupt / Path(candidates[0]["path"])
         with victim.open("ab") as stream:
             stream.write(b"SRTVS-CORRUPTION-GUARD")
         before = inventory(corrupt)
-        run_update(package_root, corrupt, expect_success=False)
+        run_update(package_root, corrupt, corrupt_local, expect_success=False)
         corruption_rejected_without_partial_write = inventory(corrupt) == before
         if not corruption_rejected_without_partial_write:
             raise RuntimeError("Updater modified files after baseline verification failure")
@@ -134,7 +177,11 @@ def main() -> int:
         "payload_ratio": manifest["stats"]["payload_ratio"],
         "exact_app_match": exact_app_match,
         "preserved_installer_files": preserved_installer_files,
+        "persistent_rollback_snapshot": persistent_rollback_snapshot,
+        "rollback_exact_baseline": rollback_exact_baseline,
+        "reapply_after_rollback": reapply_after_rollback,
         "idempotent": idempotent,
+        "rollback_record_preserved_on_idempotent": rollback_record_preserved_on_idempotent,
         "corruption_rejected_without_partial_write": corruption_rejected_without_partial_write,
     }
     result_path.parent.mkdir(parents=True, exist_ok=True)
