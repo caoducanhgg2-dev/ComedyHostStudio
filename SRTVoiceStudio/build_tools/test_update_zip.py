@@ -111,6 +111,24 @@ def main() -> int:
             if not (package_root / tool).is_file():
                 raise RuntimeError(f"Update package is missing {tool}")
 
+        alternate_baseline_count = int(manifest.get("stats", {}).get("alternate_baseline_count", 0))
+        baseline_variants = manifest.get("baseline_variants", [])
+        if alternate_baseline_count:
+            if len(baseline_variants) != alternate_baseline_count + 1:
+                raise RuntimeError("Manifest baseline_variants count is inconsistent")
+            files_with_alternate_hashes = [
+                item for item in manifest["files"]
+                if item.get("old_sha256_variants")
+            ]
+            if not files_with_alternate_hashes:
+                raise RuntimeError("Alternate baseline declared but no alternate file hashes were packaged")
+            for item in files_with_alternate_hashes:
+                hashes = [str(v).lower() for v in item["old_sha256_variants"]]
+                if len(hashes) != len(set(hashes)) or any(len(v) != 64 for v in hashes):
+                    raise RuntimeError(f"Invalid alternate baseline hashes: {item['path']}")
+        else:
+            files_with_alternate_hashes = []
+
         target = work / "LỒNG TIẾNG" / "SRT Voice Studio"
         local_appdata = work / "LocalAppData"
         shutil.copytree(baseline, target)
@@ -126,6 +144,11 @@ def main() -> int:
         persistent_rollback_snapshot = bool(last_update.get("rollback_available")) and rollback_manifest.is_file()
         if not persistent_rollback_snapshot:
             raise RuntimeError("Persistent rollback snapshot is unavailable after a successful update")
+        if last_update.get("exact_installed_baseline_saved") is not True:
+            raise RuntimeError("Updater did not record exact installed baseline preservation")
+        rollback_data = json.loads(rollback_manifest.read_text("utf-8-sig"))
+        if rollback_data.get("exact_installed_old_hashes") is not True:
+            raise RuntimeError("Rollback manifest does not certify exact installed old hashes")
 
         run_rollback(package_root, target, local_appdata)
         rollback_exact_baseline = inventory(target) == inventory(baseline)
@@ -172,12 +195,16 @@ def main() -> int:
         "to_version": manifest["to_version"],
         "baseline_kind": manifest.get("baseline_kind"),
         "baseline_run": manifest.get("baseline_run"),
+        "baseline_variant_count": len(baseline_variants),
+        "alternate_baseline_count": alternate_baseline_count,
+        "files_with_alternate_hashes": len(files_with_alternate_hashes),
         "changed_files": len(manifest["files"]),
         "deleted_files": len(manifest["delete"]),
         "payload_ratio": manifest["stats"]["payload_ratio"],
         "exact_app_match": exact_app_match,
         "preserved_installer_files": preserved_installer_files,
         "persistent_rollback_snapshot": persistent_rollback_snapshot,
+        "exact_installed_baseline_saved": True,
         "rollback_exact_baseline": rollback_exact_baseline,
         "reapply_after_rollback": reapply_after_rollback,
         "idempotent": idempotent,
