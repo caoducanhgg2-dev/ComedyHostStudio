@@ -1,0 +1,12 @@
+{
+  "name": "library-artifact-1.3.1",
+  "version": "1.3.1",
+  "source": "ChatGPT project artifact SRTVoiceStudio_Update_1.3.0_to_1.3.1",
+  "source_package_sha256": "9e0ad6cf402b9c6766abb68b4baf331d3cdf298dd99d7316a943501fd71a411a",
+  "baseline_commit": "f0c382929aec77b5a880438560d56a424aa6ce8a",
+  "file_hashes": {
+    "SRTVoiceStudio.exe": "3fff8d6ae4e44e35d62e70e7c3301c2391464575719dc146a513722bceb62c9a",
+    "_internal/README_VI.md": "08151a3cdb2555608219aa3292c80e610cc18bd28a216e4bceb2b0d895ba4d87",
+    "_internal/base_library.zip": "fbd9cd0c70695c3472370226c1248a0cca2e225ad64219948f278797103ca5c6"
+  }
+}
