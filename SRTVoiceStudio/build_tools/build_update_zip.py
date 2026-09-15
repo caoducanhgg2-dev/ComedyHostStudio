@@ -34,6 +34,30 @@ def inventory(root: Path, *, ignore_installer_managed: bool = False) -> dict[str
     return files
 
 
+def load_baseline_variant(path: Path, expected_version: str) -> dict[str, object]:
+    data = json.loads(path.read_text("utf-8"))
+    version = str(data.get("version", ""))
+    if version != expected_version:
+        raise SystemExit(f"Baseline variant {path} is for {version!r}, expected {expected_version!r}")
+    hashes = data.get("file_hashes")
+    if not isinstance(hashes, dict) or not hashes:
+        raise SystemExit(f"Baseline variant {path} has no file_hashes mapping")
+    normalized: dict[str, str] = {}
+    for rel, value in hashes.items():
+        rel = Path(str(rel)).as_posix()
+        value = str(value).lower()
+        if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+            raise SystemExit(f"Invalid SHA-256 in baseline variant {path}: {rel}")
+        normalized[rel] = value
+    return {
+        "name": str(data.get("name") or path.stem),
+        "version": version,
+        "source": str(data.get("source", "")),
+        "source_package_sha256": str(data.get("source_package_sha256", "")),
+        "file_hashes": normalized,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", required=True)
@@ -43,6 +67,7 @@ def main() -> int:
     parser.add_argument("--to-version", required=True)
     parser.add_argument("--baseline-commit", required=True)
     parser.add_argument("--baseline-run", default="")
+    parser.add_argument("--alternate-baseline-manifest", action="append", default=[])
     args = parser.parse_args()
 
     baseline = Path(args.baseline).resolve()
@@ -53,6 +78,10 @@ def main() -> int:
     if not (current / "SRTVoiceStudio.exe").is_file():
         raise SystemExit(f"Invalid current folder: {current}")
 
+    alternate_variants = [
+        load_baseline_variant(Path(p).resolve(), args.from_version)
+        for p in args.alternate_baseline_manifest
+    ]
     old = inventory(baseline, ignore_installer_managed=True)
     new = inventory(current)
     changed: list[dict[str, object]] = []
@@ -61,20 +90,62 @@ def main() -> int:
     for rel in sorted(new):
         old_hash = digest(old[rel]) if rel in old else None
         new_hash = digest(new[rel])
-        if old_hash != new_hash:
-            changed.append({
+        variant_hashes = sorted({
+            str(variant["file_hashes"].get(rel, "")).lower()
+            for variant in alternate_variants
+            if rel in variant["file_hashes"]
+            and str(variant["file_hashes"][rel]).lower() not in {old_hash, new_hash}
+        })
+        if old_hash != new_hash or variant_hashes:
+            item: dict[str, object] = {
                 "path": rel,
                 "old_sha256": old_hash,
                 "sha256": new_hash,
                 "size": new[rel].stat().st_size,
-            })
+            }
+            if variant_hashes:
+                item["old_sha256_variants"] = variant_hashes
+            changed.append(item)
 
     for rel in sorted(set(old) - set(new)):
-        deleted.append({
-            "path": rel,
-            "old_sha256": digest(old[rel]),
-            "size": old[rel].stat().st_size,
+        old_hash = digest(old[rel])
+        variant_hashes = sorted({
+            str(variant["file_hashes"].get(rel, "")).lower()
+            for variant in alternate_variants
+            if rel in variant["file_hashes"]
+            and str(variant["file_hashes"][rel]).lower() != old_hash
         })
+        item: dict[str, object] = {
+            "path": rel,
+            "old_sha256": old_hash,
+            "size": old[rel].stat().st_size,
+        }
+        if variant_hashes:
+            item["old_sha256_variants"] = variant_hashes
+        deleted.append(item)
+
+    # If an alternate released baseline names a file that differs from the target,
+    # that file must be in the payload even when the primary baseline already has
+    # target bytes. This prevents a known alternate release from being silently
+    # left with stale bytes.
+    changed_paths = {str(item["path"]) for item in changed}
+    for variant in alternate_variants:
+        for rel, variant_hash in variant["file_hashes"].items():
+            if rel not in new:
+                continue
+            new_hash = digest(new[rel])
+            if variant_hash == new_hash or rel in changed_paths:
+                continue
+            primary_hash = digest(old[rel]) if rel in old else None
+            changed.append({
+                "path": rel,
+                "old_sha256": primary_hash,
+                "old_sha256_variants": [variant_hash],
+                "sha256": new_hash,
+                "size": new[rel].stat().st_size,
+            })
+            changed_paths.add(rel)
+    changed.sort(key=lambda item: str(item["path"]))
 
     if not changed and not deleted:
         raise SystemExit("No delta detected; refusing empty update.")
@@ -84,15 +155,32 @@ def main() -> int:
     if len(changed) >= len(new) or payload_bytes >= current_bytes:
         raise SystemExit("Package is not a delta; refusing to ship the full app as an update.")
 
+    baseline_variants = [{
+        "name": "primary-github-release",
+        "version": args.from_version,
+        "kind": "verified-installed-release",
+        "commit": args.baseline_commit,
+        "run": args.baseline_run,
+    }]
+    baseline_variants.extend({
+        "name": str(v["name"]),
+        "version": str(v["version"]),
+        "kind": "verified-hash-variant",
+        "source": str(v["source"]),
+        "source_package_sha256": str(v["source_package_sha256"]),
+        "known_hash_count": len(v["file_hashes"]),
+    } for v in alternate_variants)
+
     manifest = {
-        "format": 2,
+        "format": 3,
         "product": PRODUCT,
         "app_id": APP_ID,
         "from_version": args.from_version,
         "to_version": args.to_version,
         "baseline_commit": args.baseline_commit,
         "baseline_run": args.baseline_run,
-        "baseline_kind": "verified-installed-release",
+        "baseline_kind": "verified-installed-release-with-known-hash-variants",
+        "baseline_variants": baseline_variants,
         "preserve_installer_files": "root unins*",
         "persistent_rollback": True,
         "rollback_audit_root": "%LOCALAPPDATA%/SRTVoiceStudio/updates",
@@ -103,6 +191,7 @@ def main() -> int:
             "current_file_count": len(new),
             "changed_file_count": len(changed),
             "deleted_file_count": len(deleted),
+            "alternate_baseline_count": len(alternate_variants),
             "current_bytes": current_bytes,
             "payload_bytes": payload_bytes,
             "payload_ratio": round(payload_bytes / current_bytes, 6) if current_bytes else 0.0,
@@ -128,6 +217,7 @@ def main() -> int:
         "sha256": digest(package),
         "size": package.stat().st_size,
         "rollback_tools": ["Rollback_Update.cmd", "Rollback_Update.ps1"],
+        "baseline_variants": baseline_variants,
         "manifest": manifest,
     }
     (out / "update-build.json").write_text(
