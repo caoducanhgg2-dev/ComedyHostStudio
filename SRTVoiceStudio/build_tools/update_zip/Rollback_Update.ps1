@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 $RegPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1"
 $AuditDir = Join-Path $env:LOCALAPPDATA "SRTVoiceStudio\updates"
 $LastUpdatePath = Join-Path $AuditDir "last-update.json"
+$UsingLatestRecord = [string]::IsNullOrWhiteSpace($BackupDir)
 
 function Get-Sha256([string]$Path) {
     $Stream = [System.IO.File]::OpenRead($Path)
@@ -25,15 +26,22 @@ function Get-Sha256([string]$Path) {
     finally { $Stream.Dispose() }
 }
 
-if ([string]::IsNullOrWhiteSpace($BackupDir)) {
+if ($UsingLatestRecord) {
     if (-not (Test-Path -LiteralPath $LastUpdatePath)) {
-        throw "No rollback record was found."
+        throw "No rollback record was found. Apply the 1.4 ZIP update first."
     }
     $LastUpdate = Get-Content -LiteralPath $LastUpdatePath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (($null -ne $LastUpdate.rollback_available) -and (-not [bool]$LastUpdate.rollback_available)) {
+    $PropertyNames = @($LastUpdate.PSObject.Properties.Name)
+    if (-not ($PropertyNames -contains "rollback_dir")) {
+        throw "The latest update record is from an older updater and has no persistent rollback snapshot."
+    }
+    if (($PropertyNames -contains "rollback_available") -and (-not [bool]$LastUpdate.rollback_available)) {
         throw "The latest update has already been rolled back."
     }
     $BackupDir = [string]$LastUpdate.rollback_dir
+}
+if ([string]::IsNullOrWhiteSpace($BackupDir)) {
+    throw "Rollback backup directory is empty."
 }
 $BackupDir = [IO.Path]::GetFullPath($BackupDir)
 $RollbackManifestPath = Join-Path $BackupDir "rollback_manifest.json"
@@ -154,7 +162,7 @@ try {
         rollback_dir = $BackupDir
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $AuditDir "last-rollback.json") -Encoding UTF8
 
-    if (Test-Path -LiteralPath $LastUpdatePath) {
+    if ($UsingLatestRecord -and (Test-Path -LiteralPath $LastUpdatePath)) {
         $LastUpdate = Get-Content -LiteralPath $LastUpdatePath -Raw -Encoding UTF8 | ConvertFrom-Json
         $LastUpdate | Add-Member -NotePropertyName rollback_available -NotePropertyValue $false -Force
         $LastUpdate | Add-Member -NotePropertyName rolled_back_at -NotePropertyValue (Get-Date).ToString("o") -Force
