@@ -114,7 +114,7 @@ jobs:
           github-token: ${{ github.token }}
           path: baseline-1.3.1-update
 
-      - name: Stage exact released 1.3.1 baseline
+      - name: Stage exact released 1.3.1 primary baseline
         shell: pwsh
         run: |
           $installer = Get-ChildItem baseline-release -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
@@ -157,7 +157,7 @@ jobs:
             source='verified 1.3.0 installer plus verified 1.3.1 ZIP update artifacts'
           } | ConvertTo-Json | Set-Content SRTVoiceStudio/update-output/baseline-release.json -Encoding UTF8
 
-      - name: Build 1.3.1 to 1.4.0 delta ZIP only
+      - name: Build universal 1.3.1 to 1.4.0 delta ZIP
         working-directory: SRTVoiceStudio
         run: >-
           python build_tools/build_update_zip.py
@@ -168,6 +168,33 @@ jobs:
           --to-version ${{ env.TO_VERSION }}
           --baseline-commit ${{ env.BASELINE_COMMIT }}
           --baseline-run ${{ env.BASELINE_RUN }}
+          --alternate-baseline-manifest build_tools/baseline_variants/1.3.1-library-artifact.json
+
+      - name: Verify two known 1.3.1 baseline variants are encoded
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('update-output/update_manifest.json').read_text('utf-8'))
+          assert m['format']==3
+          assert m['from_version']=='1.3.1' and m['to_version']=='1.4.0'
+          assert m['stats']['alternate_baseline_count']==1
+          assert len(m['baseline_variants'])==2
+          assert {x['name'] for x in m['baseline_variants']}=={'primary-github-release','library-artifact-1.3.1'}
+          expected={
+            'SRTVoiceStudio.exe':'3fff8d6ae4e44e35d62e70e7c3301c2391464575719dc146a513722bceb62c9a',
+            '_internal/README_VI.md':'08151a3cdb2555608219aa3292c80e610cc18bd28a216e4bceb2b0d895ba4d87',
+            '_internal/base_library.zip':'fbd9cd0c70695c3472370226c1248a0cca2e225ad64219948f278797103ca5c6',
+          }
+          by_path={x['path']:x for x in m['files']}
+          for path,sha in expected.items():
+              assert path in by_path, path
+              item=by_path[path]
+              assert sha==item.get('sha256') or sha in item.get('old_sha256_variants',[]), (path,item)
+          print(json.dumps({'baseline_variants':m['baseline_variants'],'alternate_baseline_count':1},ensure_ascii=False,indent=2))
+          '@ | python -
 
       - name: Test exact update, persistent rollback, reapply, idempotency and corruption guard
         working-directory: SRTVoiceStudio
@@ -201,6 +228,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $lastUpdate)) { throw 'Persistent rollback audit was not created.' }
           $audit = Get-Content -LiteralPath $lastUpdate -Raw -Encoding UTF8 | ConvertFrom-Json
           if (-not [bool]$audit.rollback_available) { throw 'Persistent rollback was not marked available.' }
+          if (-not [bool]$audit.exact_installed_baseline_saved) { throw 'Exact installed baseline was not preserved.' }
           if (-not (Test-Path -LiteralPath ([string]$audit.rollback_manifest))) { throw 'Persistent rollback manifest is missing.' }
 
           & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
@@ -227,10 +255,13 @@ jobs:
             sha256=$digest
             bytes=$size
             baseline_version='1.3.1'
-            baseline_update_sha256=$env:BASELINE_UPDATE_SHA256
+            known_baseline_variants=2
+            primary_baseline_update_sha256=$env:BASELINE_UPDATE_SHA256
+            library_baseline_package_sha256='9E0AD6CF402B9C6766ABB68B4BAF331D3CDF298DD99D7316A943501FD71A411A'
             no_installer_exe_during_1_4_update=$true
             user_data_preserved=$true
             corruption_guard=$true
+            exact_installed_baseline_saved=$true
             persistent_post_success_rollback=$true
             rollback_reapply_verified=$true
           } | ConvertTo-Json | Set-Content update-output/final-acceptance.json -Encoding UTF8
