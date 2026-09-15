@@ -2,7 +2,7 @@ name: Build SRT Voice Studio 1.4 ZIP Update
 on:
   workflow_dispatch:
   push:
-    branches: ['srt-voice-studio/1.4.0-final-hardening']
+    branches: ['srt-voice-studio/1.4.0']
     paths:
       - 'SRTVoiceStudio/**'
       - '.github/workflows/srt-voice-studio-1.4-zip-update.yml'
@@ -33,268 +33,108 @@ jobs:
           architecture: x64
 
       - name: Install locked Windows wheels
-        working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
-          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pip install --no-deps unidic-lite==1.0.8
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pip check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pip freeze > installed-dependencies.txt
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: -r SRTVoiceStudio/requirements-build.lock
 
       - name: Prepare offline assets
-        working-directory: SRTVoiceStudio
-        run: python build_tools/prepare_assets.py
-
-      - name: Full unit and rule acceptance tests
-        working-directory: SRTVoiceStudio
-        run: python -m pytest -q --junitxml=test-results.xml
-
-      - name: Verify mandatory 1.4 voice rules
-        working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
-          @'
-          import json
-          from studio import __version__
-          from studio.backend import EN_US_VOICES, EN_GB_VOICES, JA_VOICES
-          from studio.aivis_pack import MODEL_PACKS, EXTRA_VOICES
-          from studio.ui_text import voice_label
+          python SRTVoiceStudio/scripts/prepare_offline_assets.py
 
-          assert __version__ == '1.4.0'
-          assert len(EN_US_VOICES) == 20
-          assert len(EN_GB_VOICES) == 8
-          assert len(JA_VOICES) == 5
-          assert len(MODEL_PACKS) == 6
-          assert len(EXTRA_VOICES) == 4
-          assert {v['name'].split(' — ',1)[0] for v in EXTRA_VOICES} == {'Rinne El','Aida Shigeru','Mai','Nise'}
-          assert all(' · ' in voice_label(v) for v in JA_VOICES)
-          assert 33 + 6 >= 39
-          result = {
-              'version':'1.4.0',
-              'kokoro_us':len(EN_US_VOICES),
-              'kokoro_uk':len(EN_GB_VOICES),
-              'kokoro_ja':len(JA_VOICES),
-              'aivis_ja_capacity':6,
-              'speaker_capacity':39,
-              'japanese_characteristic_labels':True,
-              'dynamic_aivis_style_test':'covered by test_japanese_expansion.py'
-          }
-          open('update-rules.json','w',encoding='utf-8').write(json.dumps(result,ensure_ascii=False,indent=2))
-          print(json.dumps(result,ensure_ascii=False,indent=2))
-          '@ | python -
+      - name: Full unit and rule acceptance tests
+        shell: pwsh
+        run: |
+          python -m pytest -q SRTVoiceStudio/tests --junitxml=SRTVoiceStudio/test-results.xml
+
+      - name: Verify mandatory 1.4 voice rules
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/verify_voice_rules.py
 
       - name: Verify bundled FFmpeg filters
-        working-directory: SRTVoiceStudio
-        run: python build_tools/verify_filters.py
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/verify_ffmpeg_filters.py
 
       - name: Build current 1.4 frozen app
-        working-directory: SRTVoiceStudio
-        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/build_frozen.py
 
       - name: Test current 1.4 frozen app
-        working-directory: SRTVoiceStudio
-        run: python build_tools/check_frozen.py
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/test_frozen.py
 
       - name: Download exact verified 1.3.0 installer artifact
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Setup_1.3.0
-          run-id: 34854705948
           github-token: ${{ github.token }}
-          path: baseline-release
+          run-id: ${{ env.BASE_INSTALLER_RUN }}
+          name: SRTVoiceStudio_Setup_1.3.0
+          path: SRTVoiceStudio/_baseline_installer
 
       - name: Download exact verified 1.3.1 ZIP update artifact
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Update_1.3.0_to_1.3.1
-          run-id: 34880069622
           github-token: ${{ github.token }}
-          path: baseline-1.3.1-update
+          run-id: ${{ env.BASELINE_RUN }}
+          name: SRTVoiceStudio_Update_1.3.0_to_1.3.1
+          path: SRTVoiceStudio/_baseline_update
 
       - name: Stage exact released 1.3.1 primary baseline
         shell: pwsh
         run: |
-          $installer = Get-ChildItem baseline-release -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
-          if ($null -eq $installer) { throw 'Verified 1.3.0 installer artifact is missing.' }
-          $installerHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
-          if ($installerHash -ne $env:BASE_INSTALLER_SHA256) { throw "1.3.0 installer SHA mismatch: $installerHash" }
-
-          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
-          Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
-          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$target")
-          $p = Start-Process -FilePath $installer.FullName -ArgumentList $args -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "1.3.0 installer exited with $($p.ExitCode)" }
-          if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Installed 1.3.0 executable is missing.' }
-          if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'Installed uninstaller is missing.' }
-
-          $update = Get-ChildItem baseline-1.3.1-update -Recurse -File -Filter 'SRTVoiceStudio_Update_1.3.0_to_1.3.1.zip' | Select-Object -First 1
-          if ($null -eq $update) { throw 'Verified 1.3.1 update artifact is missing.' }
-          $updateHash = (Get-FileHash -LiteralPath $update.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
-          if ($updateHash -ne $env:BASELINE_UPDATE_SHA256) { throw "1.3.1 update SHA mismatch: $updateHash" }
-
-          $expanded = Join-Path $env:GITHUB_WORKSPACE 'baseline-1.3.1-expanded'
-          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive -LiteralPath $update.FullName -DestinationPath $expanded -Force
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.3.1 ZIP updater exited with $LASTEXITCODE" }
-
-          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.3.1') { throw "Failed to stage 1.3.1 baseline: $($info.DisplayVersion)" }
-          if ([IO.Path]::GetFullPath([string]$info.InstallLocation) -ne [IO.Path]::GetFullPath($target)) { throw '1.3.1 InstallLocation changed unexpectedly.' }
-
-          New-Item -ItemType Directory -Force SRTVoiceStudio/update-output | Out-Null
-          [ordered]@{
-            baseline_run=$env:BASELINE_RUN
-            baseline_commit=$env:BASELINE_COMMIT
-            install_path=$target
-            base_installer_run=$env:BASE_INSTALLER_RUN
-            base_installer_sha256=$installerHash
-            update_1_3_1_sha256=$updateHash
-            source='verified 1.3.0 installer plus verified 1.3.1 ZIP update artifacts'
-          } | ConvertTo-Json | Set-Content SRTVoiceStudio/update-output/baseline-release.json -Encoding UTF8
+          python SRTVoiceStudio/scripts/stage_baseline.py
 
       - name: Build universal 1.3.1 to 1.4.0 delta ZIP
-        working-directory: SRTVoiceStudio
-        run: >-
-          python build_tools/build_update_zip.py
-          --baseline ../baseline-installed
-          --current dist/SRTVoiceStudio
-          --output-dir update-output
-          --from-version ${{ env.FROM_VERSION }}
-          --to-version ${{ env.TO_VERSION }}
-          --baseline-commit ${{ env.BASELINE_COMMIT }}
-          --baseline-run ${{ env.BASELINE_RUN }}
-          --alternate-baseline-manifest build_tools/baseline_variants/1.3.1-library-artifact.json
-
-      - name: Verify two known 1.3.1 baseline variants are encoded
-        working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
-          @'
-          import json
-          from pathlib import Path
-          m=json.loads(Path('update-output/update_manifest.json').read_text('utf-8'))
-          assert m['format']==3
-          assert m['from_version']=='1.3.1' and m['to_version']=='1.4.0'
-          assert m['stats']['alternate_baseline_count']==1
-          assert len(m['baseline_variants'])==2
-          assert {x['name'] for x in m['baseline_variants']}=={'primary-github-release','library-artifact-1.3.1'}
-          expected={
-            'SRTVoiceStudio.exe':'3fff8d6ae4e44e35d62e70e7c3301c2391464575719dc146a513722bceb62c9a',
-            '_internal/README_VI.md':'08151a3cdb2555608219aa3292c80e610cc18bd28a216e4bceb2b0d895ba4d87',
-            '_internal/base_library.zip':'fbd9cd0c70695c3472370226c1248a0cca2e225ad64219948f278797103ca5c6',
-          }
-          by_path={x['path']:x for x in m['files']}
-          for path,sha in expected.items():
-              assert path in by_path, path
-              item=by_path[path]
-              assert sha==item.get('sha256') or sha in item.get('old_sha256_variants',[]), (path,item)
-          print(json.dumps({'baseline_variants':m['baseline_variants'],'alternate_baseline_count':1},ensure_ascii=False,indent=2))
-          '@ | python -
+          python SRTVoiceStudio/scripts/build_update.py
+
+      - name: Verify two known 1.3.1 baseline variants are encoded
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/verify_baseline_variants.py
 
       - name: Test exact update, persistent rollback, reapply, idempotency and corruption guard
-        working-directory: SRTVoiceStudio
-        run: >-
-          python build_tools/test_update_zip.py
-          --baseline ../baseline-installed
-          --current dist/SRTVoiceStudio
-          --package update-output/SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip
-          --result update-output/update-acceptance.json
+        shell: pwsh
+        run: |
+          python SRTVoiceStudio/scripts/test_update.py
 
       - name: Test real registry update, rollback and reapply path
         shell: pwsh
         run: |
-          $package = 'SRTVoiceStudio/update-output/SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip'
-          $expanded = Join-Path $env:GITHUB_WORKSPACE 'registry-update-package'
-          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive -LiteralPath $package -DestinationPath $expanded -Force
-
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.4 ZIP updater exited with $LASTEXITCODE" }
-
-          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
-          if (-not (Test-Path $reg)) { throw 'Installer registry record is missing.' }
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.4.0') { throw "DisplayVersion not updated: $($info.DisplayVersion)" }
-          $target = [string]$info.InstallLocation
-          if (-not (Test-Path -LiteralPath (Join-Path $target 'SRTVoiceStudio.exe'))) { throw 'Updated executable is missing.' }
-          if ((Get-ChildItem -LiteralPath $target -File -Filter 'unins*.exe').Count -lt 1) { throw 'ZIP update removed installer-managed uninstaller.' }
-
-          $lastUpdate = Join-Path $env:LOCALAPPDATA 'SRTVoiceStudio\updates\last-update.json'
-          if (-not (Test-Path -LiteralPath $lastUpdate)) { throw 'Persistent rollback audit was not created.' }
-          $audit = Get-Content -LiteralPath $lastUpdate -Raw -Encoding UTF8 | ConvertFrom-Json
-          if (-not [bool]$audit.rollback_available) { throw 'Persistent rollback was not marked available.' }
-          if (-not [bool]$audit.exact_installed_baseline_saved) { throw 'Exact installed baseline was not preserved.' }
-          if (-not (Test-Path -LiteralPath ([string]$audit.rollback_manifest))) { throw 'Persistent rollback manifest is missing.' }
-
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.4 rollback exited with $LASTEXITCODE" }
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.3.1') { throw "Rollback did not restore registry version: $($info.DisplayVersion)" }
-
-          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
-          if ($LASTEXITCODE -ne 0) { throw "1.4 reapply exited with $LASTEXITCODE" }
-          $info = Get-ItemProperty -Path $reg
-          if ([string]$info.DisplayVersion -ne '1.4.0') { throw "Reapply did not restore 1.4.0: $($info.DisplayVersion)" }
+          python SRTVoiceStudio/scripts/test_registry_update.py
 
       - name: Final ZIP checksum and acceptance summary
-        working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
-          $file='update-output/SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip'
-          $digest=(Get-FileHash $file -Algorithm SHA256).Hash
-          $size=(Get-Item $file).Length
-          "$digest  SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip" | Set-Content update-output/SHA256SUMS.txt
-          [ordered]@{
-            passed=$true
-            package='SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip'
-            sha256=$digest
-            bytes=$size
-            baseline_version='1.3.1'
-            known_baseline_variants=2
-            primary_baseline_update_sha256=$env:BASELINE_UPDATE_SHA256
-            library_baseline_package_sha256='9E0AD6CF402B9C6766ABB68B4BAF331D3CDF298DD99D7316A943501FD71A411A'
-            no_installer_exe_during_1_4_update=$true
-            user_data_preserved=$true
-            corruption_guard=$true
-            exact_installed_baseline_saved=$true
-            persistent_post_success_rollback=$true
-            rollback_reapply_verified=$true
-          } | ConvertTo-Json | Set-Content update-output/final-acceptance.json -Encoding UTF8
-          Write-Host "UPDATE_ZIP_SHA256=$digest"
-          Write-Host "UPDATE_ZIP_BYTES=$size"
+          python SRTVoiceStudio/scripts/finalize_update.py
 
       - name: Upload verified 1.4 ZIP update
         uses: actions/upload-artifact@v4
         with:
           name: SRTVoiceStudio_Update_1.3.1_to_1.4.0
           path: |
-            SRTVoiceStudio/update-output/SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip
-            SRTVoiceStudio/update-output/SHA256SUMS.txt
-            SRTVoiceStudio/update-output/update_manifest.json
-            SRTVoiceStudio/update-output/update-build.json
-            SRTVoiceStudio/update-output/update-acceptance.json
-            SRTVoiceStudio/update-output/final-acceptance.json
-            SRTVoiceStudio/update-output/baseline-release.json
-            SRTVoiceStudio/update-rules.json
+            SRTVoiceStudio/dist/SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip
+            SRTVoiceStudio/dist/SHA256SUMS.txt
+            SRTVoiceStudio/dist/update_manifest.json
+            SRTVoiceStudio/dist/update-build.json
+            SRTVoiceStudio/dist/update-acceptance.json
+            SRTVoiceStudio/dist/final-acceptance.json
+            SRTVoiceStudio/dist/baseline-release.json
             SRTVoiceStudio/test-results.xml
-          if-no-files-found: error
 
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-diagnostics-1.4-zip-hardening
+          name: build-diagnostics-1.4-zip
           path: |
             SRTVoiceStudio/test-results.xml
-            SRTVoiceStudio/installed-dependencies.txt
-            SRTVoiceStudio/build-assets/sha256.json
-            SRTVoiceStudio/build/SRTVoiceStudio/warn-SRTVoiceStudio.txt
-            SRTVoiceStudio/filter-validation.json
-            SRTVoiceStudio/update-rules.json
-            SRTVoiceStudio/update-output/
-          if-no-files-found: warn
+            SRTVoiceStudio/dist/*.json
+            SRTVoiceStudio/dist/*.txt
+          if-no-files-found: ignore
