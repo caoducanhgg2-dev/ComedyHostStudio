@@ -49,16 +49,19 @@ Gói Aivis tải theo yêu cầu, không tự tải khi chưa chọn. Model đư
 
 Aivis model trong gói dùng ACML 1.0; engine AivisSpeech dùng LGPL-3.0; BERT đi kèm dùng CC-BY-SA-4.0. Cần đọc điều kiện giấy phép hiển thị trong ứng dụng trước khi dùng thương mại/review/comedy.
 
-## Cập nhật 1.3.1 → 1.4.0 bằng ZIP nhỏ
+## Cập nhật 1.3.1 → 1.4.0 bằng một ZIP nhỏ
 
 Bản 1.4 ưu tiên **không chạy lại installer EXE**. Gói phát hành là `SRTVoiceStudio_Update_1.3.1_to_1.4.0.zip` và chỉ chứa các file thực sự thay đổi cùng manifest/checksum.
+
+Trong quá trình rà soát release đã phát hiện hai biến thể build 1.3.1 hợp lệ từng được tạo từ cùng dòng source. Vì vậy manifest 1.4 hỗ trợ **nhiều checksum baseline đã xác minh** thay vì buộc người dùng chọn hai ZIP khác nhau. Chỉ các hash đã biết mới được chấp nhận; file bị chỉnh sửa hoặc baseline lạ vẫn bị chặn trước khi ghi.
 
 1. Đóng SRT Voice Studio.
 2. Giải nén toàn bộ ZIP vào một thư mục tạm.
 3. Chạy `Apply_Update.cmd`.
-4. Updater tự tìm vị trí cài đặt, kiểm tra SHA-256 của payload và kiểm tra checksum baseline **trước khi ghi đè**.
-5. Nếu baseline không đúng hoặc patch lỗi giữa chừng, updater dừng và transaction rollback trả các file đã động vào về trạng thái trước khi chạy.
-6. Khi update thành công, ứng dụng giữ thêm một **persistent rollback snapshot** trong `%LOCALAPPDATA%\SRTVoiceStudio\updates`.
+4. Updater tự tìm vị trí cài đặt, kiểm tra SHA-256 của payload và kiểm tra toàn bộ file cần thay **trước khi ghi đè**.
+5. Nếu baseline không thuộc danh sách checksum hợp lệ hoặc patch lỗi giữa chừng, updater dừng và transaction rollback trả các file đã động vào về trạng thái trước khi chạy.
+6. Khi update thành công, ứng dụng giữ một **persistent rollback snapshot** trong `%LOCALAPPDATA%\SRTVoiceStudio\updates`.
+7. Snapshot lưu chính xác bytes và SHA-256 cũ thực tế trên máy. Vì vậy máy dùng biến thể 1.3.1 nào sẽ rollback về đúng biến thể đó.
 
 Chạy lại cùng patch trên 1.4 đã cập nhật là idempotent: không thay đổi app và không ghi đè snapshot rollback hợp lệ.
 
@@ -68,12 +71,13 @@ Giữ thư mục ZIP đã giải nén và chạy `Rollback_Update.cmd`. Rollback
 
 - đọc snapshot gần nhất;
 - kiểm tra checksum các file 1.4 hiện tại trước khi phục hồi;
+- kiểm tra lại checksum bản sao cũ đã lưu;
 - khôi phục chính xác file cũ hoặc xóa file mới được thêm bởi patch;
 - trả `DisplayVersion` về 1.3.1 khi registry installer còn tồn tại;
 - tự rollback chính quá trình phục hồi nếu có lỗi giữa chừng.
 
-Sau khi quay về 1.3.1, có thể chạy `Apply_Update.cmd` lần nữa để cài lại 1.4. Snapshot rollback không thay đổi dữ liệu người dùng, Favorites hay gói giọng trong `%LOCALAPPDATA%\SRTVoiceStudio` ngoài thư mục audit/update riêng.
+Sau khi quay về 1.3.1, có thể chạy `Apply_Update.cmd` lần nữa để cài lại 1.4. Snapshot rollback không thay đổi Favorites, gói giọng hoặc dữ liệu người dùng; updater chỉ tạo dữ liệu audit/rollback riêng dưới `%LOCALAPPDATA%\SRTVoiceStudio\updates`.
 
 ## Nghiệm thu bắt buộc 1.4
 
-Build phát hành chỉ được coi là đạt khi đồng thời qua các kiểm tra: unit tests; 20 US + 8 UK + 5 Japanese Kokoro; 6 Aivis Japanese khi cài đủ; mapping style động; frozen-app check; delta từ đúng artifact 1.3.1; exact patched-app match; corruption guard không ghi dở; idempotency; persistent rollback về đúng baseline; reapply sau rollback; registry 1.3.1 → 1.4.0 → 1.3.1 → 1.4.0; và timeline vẫn overlap = 0.
+Build phát hành chỉ được coi là đạt khi đồng thời qua các kiểm tra: unit tests; 20 US + 8 UK + 5 Japanese Kokoro; 6 Aivis Japanese khi cài đủ; mapping style động; frozen-app check; delta từ artifact 1.3.1 đã xác minh; manifest chứa các biến thể baseline 1.3.1 đã biết; exact patched-app match; corruption guard không ghi dở; idempotency; snapshot lưu đúng baseline thực tế; persistent rollback về đúng baseline; reapply sau rollback; registry 1.3.1 → 1.4.0 → 1.3.1 → 1.4.0; và timeline vẫn overlap = 0.
