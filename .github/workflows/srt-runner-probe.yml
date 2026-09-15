@@ -1,0 +1,21 @@
+name: SRT runner availability probe
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.4.0-final-hardening']
+    paths:
+      - '.github/workflows/srt-runner-probe.yml'
+permissions:
+  contents: read
+jobs:
+  linux-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "ubuntu runner allocated"
+  windows-probe:
+    runs-on: windows-latest
+    timeout-minutes: 2
+    steps:
+      - shell: pwsh
+        run: Write-Host "windows runner allocated"
