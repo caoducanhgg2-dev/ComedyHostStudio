@@ -2,14 +2,17 @@
 import numpy as np
 from .audio import convert, normalize
 from .timeline import RATE, TimelineError, validate
+from .continuity import trim_edge_silence, audible_end
 
 MIN_EFFECTIVE_SPEED = 0.88
+CONTINUOUS_MIN_EFFECTIVE_SPEED = 0.86
 MAX_EFFECTIVE_SPEED = 1.20
 TARGET_TRAILING = 0.15
 UNDERFILL_TRIGGER = 0.30
 UNDERFILL_WARNING = 0.80
-CONTINUOUS_TRIGGER = 0.16
-CONTINUOUS_WARNING = 0.50
+CONTINUOUS_TRIGGER = 0.08
+CONTINUOUS_TOLERANCE = 0.035
+CONTINUOUS_WARNING_EXCESS = 0.20
 
 
 def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
@@ -23,57 +26,111 @@ def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
     target_ms = int(getattr(settings, 'continuous_target_ms', 100))
     if continuous and not 50 <= target_ms <= 250:
         raise ValueError('Continuous target phải nằm trong 50–250 ms.')
-    target_trailing = target_ms / 1000 if continuous else TARGET_TRAILING
+
+    configured_gap = max(0.0, float(settings.gap_ms) / 1000.0)
+    target_transition = target_ms / 1000.0 if continuous else None
+    # slots_for() has already removed the configured minimum gap from this slot.
+    # Therefore a 100 ms Continuous target + 100 ms minimum gap means audio
+    # should fill the slot itself; adding another 100 ms here would double-gap.
+    target_trailing = max(0.0, target_transition - configured_gap) if continuous else TARGET_TRAILING
+    min_effective = CONTINUOUS_MIN_EFFECTIVE_SPEED if continuous else MIN_EFFECTIVE_SPEED
     underfill_trigger = CONTINUOUS_TRIGGER if continuous else UNDERFILL_TRIGGER
-    underfill_warning = CONTINUOUS_WARNING if continuous else UNDERFILL_WARNING
-    available = slot.end-slot.start
-    duration = len(samples)/rate
-    # B already includes emotion tempo. Account for it exactly once, including
-    # its interaction with user speed and the measured effect tail.
-    requested = min(MAX_EFFECTIVE_SPEED, settings.speed*emotion_tempo)
-    slot_seconds = available/RATE
-    initial_duration = duration*emotion_tempo/requested
-    initial_trailing = max(0.0, slot_seconds-initial_duration)
-    underfill_detected = initial_trailing > underfill_trigger
-    needed = duration/slot_seconds*emotion_tempo
+
+    original_processed_duration = len(samples) / rate
+    post_trim_start = post_trim_end = 0.0
+    if continuous:
+        # A second edge pass after emotion/FX is essential.  Some TTS and DSP
+        # paths retain low-level tails that are technically non-zero but sound
+        # silent. Smart Fit must measure the audible speech region, not raw PCM.
+        samples, post_trim_start, post_trim_end = trim_edge_silence(
+            samples, rate, True, keep_lead_ms=20, keep_tail_ms=35)
+    if not len(samples) or not np.isfinite(samples).all():
+        raise RuntimeError('Continuous Voice tạo audio sau DSP không hợp lệ.')
+
+    available = slot.end - slot.start
+    duration = len(samples) / rate
+    requested = min(MAX_EFFECTIVE_SPEED, settings.speed * emotion_tempo)
+    slot_seconds = available / RATE
+    initial_duration = duration * emotion_tempo / requested
+    initial_trailing = max(0.0, slot_seconds - initial_duration)
+    underfill_detected = initial_trailing > (target_trailing + underfill_trigger if continuous else underfill_trigger)
+    needed = duration / slot_seconds * emotion_tempo
     effective = requested
-    # Smart Timeline Fit 2.0 classifies measured B before extra speed changes.
-    classification = 'UNDERFILL' if slot_seconds-duration > underfill_trigger else ('OVERFLOW' if duration > slot_seconds else 'FIT')
+    classification = ('UNDERFILL' if slot_seconds - duration > underfill_trigger
+                      else ('OVERFLOW' if duration > slot_seconds else 'FIT'))
+
     if settings.adaptive:
         if underfill_detected:
-            # Never move another caption. Continuous mode aims for a tighter
-            # tail while retaining the same hard 0.88x naturalness floor.
-            target_duration = max(1/RATE, slot_seconds-target_trailing)
-            fill_speed = duration*emotion_tempo/target_duration
+            target_duration = max(1 / RATE, slot_seconds - target_trailing)
+            fill_speed = duration * emotion_tempo / target_duration
             ceiling = min(requested, 1.0, emotion_tempo) if classification == 'UNDERFILL' else requested
-            effective = max(MIN_EFFECTIVE_SPEED, min(ceiling,fill_speed))
+            effective = max(min_effective, min(ceiling, fill_speed))
         else:
-            effective = max(requested,min(needed,1.15))
+            effective = max(requested, min(needed, 1.15))
             if needed > 1.15:
-                effective = max(effective,min(needed,MAX_EFFECTIVE_SPEED))
-    effective = max(MIN_EFFECTIVE_SPEED,min(effective,MAX_EFFECTIVE_SPEED))
-    fit_tempo = effective/emotion_tempo
-    fitted = convert(samples,rate,fit_tempo,folder,cancel)
-    excess = max(0,len(fitted)-available)
-    if excess and settings.overflow == 'Stop and Report':
+                effective = max(effective, min(needed, MAX_EFFECTIVE_SPEED))
+    effective = max(min_effective, min(effective, MAX_EFFECTIVE_SPEED))
+
+    def converted_for(value):
+        return convert(samples, rate, value / emotion_tempo, folder, cancel)
+
+    fitted = converted_for(effective)
+    refit_passes = 0
+    # Closed-loop audible fit.  atempo and DSP can leave a different audible end
+    # than their raw array length suggests, so measure the result and correct at
+    # most twice.  We only slow when there is excess audible silence; no caption
+    # start is moved and the hard naturalness floor remains enforced.
+    if continuous and settings.adaptive:
+        desired_active_seconds = max(1 / RATE, slot_seconds - target_trailing)
+        for _ in range(2):
+            clipped = fitted[:available]
+            active_stop = audible_end(clipped, RATE)
+            current_active_seconds = active_stop / RATE
+            internal_gap = max(0.0, slot_seconds - current_active_seconds)
+            if internal_gap <= target_trailing + CONTINUOUS_TOLERANCE:
+                break
+            if current_active_seconds <= 0.05 or effective <= min_effective + 1e-6:
+                break
+            correction = current_active_seconds / desired_active_seconds
+            candidate = max(min_effective, min(effective, effective * correction))
+            if candidate >= effective - 0.001:
+                break
+            effective = candidate
+            fitted = converted_for(effective)
+            refit_passes += 1
+
+    fit_tempo = effective / emotion_tempo
+    active_before_clip = audible_end(fitted, RATE) if continuous else len(fitted)
+    raw_excess = max(0, len(fitted) - available)
+    audible_excess = max(0, active_before_clip - available)
+    if audible_excess and settings.overflow == 'Stop and Report':
         raise TimelineError(f'CAPTION {slot.caption.index} TOO LONG\nSlot: {available/RATE:.3f} s\n'
             f'Processed: {duration:.3f} s\nSpeed: {effective:.3f}x\n'
-            f'Adjusted: {len(fitted)/RATE:.3f} s\nKhông export.')
+            f'Audible overflow: {audible_excess/RATE:.3f} s\nKhông export.')
+
     fitted = fitted[:available].copy()
-    if excess:
-        fade = min(len(fitted),240)
-        fitted[-fade:] *= np.linspace(1,0,fade,dtype=np.float32)
+    # Fade only when audible speech, not merely an inaudible processing tail,
+    # crossed the boundary.
+    if audible_excess:
+        fade = min(len(fitted), 240)
+        fitted[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
     if settings.loudness:
         fitted = normalize(fitted)
-    fitted = np.clip(fitted,-.89,.89)
-    # The slot already incorporates next-start minus gap. A second, whole-SRT
-    # validation remains in render before the master is encoded.
-    validate([slot],[len(fitted)],settings.gap_ms)
-    trailing = max(0.0,(available-len(fitted))/RATE)
-    underfilled = trailing > underfill_warning
-    speed_up = effective > requested+1e-6
-    slow_down = effective < requested-1e-6
-    if excess:
+    fitted = np.clip(fitted, -.89, .89)
+    validate([slot], [len(fitted)], settings.gap_ms)
+
+    raw_trailing = max(0.0, (available - len(fitted)) / RATE)
+    active_stop = audible_end(fitted, RATE) if continuous else len(fitted)
+    audible_internal_trailing = max(0.0, (available - active_stop) / RATE)
+    transition_silence = audible_internal_trailing + configured_gap if continuous else audible_internal_trailing
+    if continuous:
+        underfilled = transition_silence > target_transition + CONTINUOUS_WARNING_EXCESS
+    else:
+        underfilled = audible_internal_trailing > UNDERFILL_WARNING
+
+    speed_up = effective > requested + 1e-6
+    slow_down = effective < requested - 1e-6
+    if audible_excess:
         fit_status = 'TOO_LONG_TRIMMED'
     elif underfilled:
         fit_status = 'TOO_SHORT'
@@ -83,17 +140,41 @@ def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
         fit_status = 'SLOW_DOWN'
     else:
         fit_status = 'GOOD'
-    record = dict(caption=slot.caption.index,start_sample=slot.start,
-        end_sample=slot.start+len(fitted),allowed_end=slot.end,
-        processed_seconds=duration,available_seconds=available/RATE,classification=classification,
-        fit_status=fit_status,continuous_mode=continuous,target_trailing_seconds=target_trailing,
-        speed=effective,emotion_tempo=emotion_tempo,fit_tempo=fit_tempo,
-        requested_speed=requested,trimmed=bool(excess),trimmed_samples=excess,
-        final_seconds=len(fitted)/RATE,overlaps=0,
-        initial_trailing_seconds=initial_trailing, trailing_silence=trailing,
+
+    at_floor = underfilled and effective <= min_effective + 1e-6
+    if at_floor and continuous:
+        warning = 'CONTINUOUS TARGET UNREACHABLE / SHORT SCRIPT'
+    elif at_floor:
+        warning = 'SHORT SCRIPT / REMAINING SILENCE'
+    else:
+        warning = ''
+
+    record = dict(
+        caption=slot.caption.index, start_sample=slot.start,
+        end_sample=slot.start + len(fitted), allowed_end=slot.end,
+        audible_end_sample=slot.start + active_stop,
+        processed_seconds=duration, processed_seconds_before_continuity_trim=original_processed_duration,
+        available_seconds=available / RATE, classification=classification,
+        fit_status=fit_status, continuous_mode=continuous,
+        target_transition_seconds=target_transition,
+        target_trailing_seconds=target_trailing,
+        configured_gap_seconds=configured_gap,
+        speed=effective, emotion_tempo=emotion_tempo, fit_tempo=fit_tempo,
+        requested_speed=requested, trimmed=bool(audible_excess),
+        trimmed_samples=audible_excess, raw_tail_trimmed_samples=max(0, raw_excess-audible_excess),
+        final_seconds=len(fitted) / RATE, overlaps=0,
+        initial_trailing_seconds=initial_trailing,
+        raw_trailing_silence=raw_trailing,
+        internal_audible_trailing_silence=audible_internal_trailing,
+        transition_silence=transition_silence,
+        trailing_silence=audible_internal_trailing,
         underfill_detected=underfill_detected, underfilled=underfilled,
-        underfill_adjusted=slow_down,
-        speed_up=speed_up, slow_down=slow_down,
-        underfilled_at_hard_minimum=underfilled and effective <= MIN_EFFECTIVE_SPEED+1e-6,
-        warning='SHORT SCRIPT / REMAINING SILENCE' if underfilled and effective <= MIN_EFFECTIVE_SPEED+1e-6 else '')
-    return fitted,record
+        underfill_adjusted=slow_down, speed_up=speed_up, slow_down=slow_down,
+        underfilled_at_hard_minimum=at_floor,
+        continuous_refit_passes=refit_passes,
+        post_dsp_trimmed_start=post_trim_start,
+        post_dsp_trimmed_end=post_trim_end,
+        post_dsp_trimmed_seconds=post_trim_start + post_trim_end,
+        minimum_effective_speed=min_effective,
+        warning=warning)
+    return fitted, record
