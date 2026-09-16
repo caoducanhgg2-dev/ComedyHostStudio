@@ -1,0 +1,259 @@
+name: Build SRT Voice Studio 1.4.1 Voice Expansion ZIP
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.4.1-voice-expansion']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.4.1-voice-expansion.yml'
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BASE_INSTALLER_RUN: '34854705948'
+  BASE_INSTALLER_SHA256: F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC
+  BASE_140_RUN: '35058721774'
+  BASE_140_SHA256: 63D057A8902E60C53180B17BA3424F2AF494FC493B702B2A2747A8F8AC6C347E
+  FROM_VERSION: 1.4.0
+  TO_VERSION: 1.4.1
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Checkout 1.4.1 source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+
+      - name: Run full tests including 1.4.1 voice catalogue
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-1.4.1.xml
+
+      - name: Verify mandatory 1.4.1 voice rules
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          from studio import __version__
+          from studio.backend import EN_US_VOICES,EN_GB_VOICES,JA_VOICES
+          from studio.ui_text import voice_characteristic
+          from studio.voice_catalog import catalog_voices
+          assert __version__=='1.4.1'
+          assert len(EN_US_VOICES)==20 and all(voice_characteristic(v) for v in EN_US_VOICES)
+          assert len(EN_GB_VOICES)==8 and all(voice_characteristic(v) for v in EN_GB_VOICES)
+          assert len(JA_VOICES)==5 and all(voice_characteristic(v) for v in JA_VOICES)
+          aivis=catalog_voices()
+          assert len(aivis)==6 and all(voice_characteristic(v.id) for v in aivis)
+          assert {v.name.split(' — ',1)[0] for v in aivis}=={'Mao','Kohaku','Rinne El','Aida Shigeru','Mai','Nise'}
+          print({'version':__version__,'us':20,'uk':8,'kokoro_ja':5,'aivis_ja':6,'speaker_capacity':39,'all_characteristics':True})
+          '@ | python -
+
+      - name: Build current 1.4.1 frozen app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+
+      - name: Test current 1.4.1 frozen app
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+
+      - name: Download exact verified 1.3.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
+          github-token: ${{ github.token }}
+          path: baseline-130
+
+      - name: Download exact installed 1.4.0 recovery artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0
+          run-id: 35058721774
+          github-token: ${{ github.token }}
+          path: baseline-140-update
+
+      - name: Reconstruct exact user 1.4.0 baseline
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem baseline-130 -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
+          if ($null -eq $installer) { throw 'Verified 1.3.0 installer artifact is missing.' }
+          $installerHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($installerHash -ne $env:BASE_INSTALLER_SHA256) { throw "1.3.0 installer SHA mismatch: $installerHash" }
+          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$target") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "1.3.0 installer exited with $($p.ExitCode)" }
+
+          $update = Get-ChildItem baseline-140-update -Recurse -File -Filter 'SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip' | Select-Object -First 1
+          if ($null -eq $update) { throw 'Verified 1.4.0 recovery ZIP is missing.' }
+          $updateHash = (Get-FileHash -LiteralPath $update.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($updateHash -ne $env:BASE_140_SHA256) { throw "1.4.0 recovery SHA mismatch: $updateHash" }
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'baseline-140-expanded'
+          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $update.FullName -DestinationPath $expanded -Force
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "1.4.0 recovery updater exited with $LASTEXITCODE" }
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          $info = Get-ItemProperty -Path $reg
+          if ([string]$info.DisplayVersion -ne '1.4.0') { throw "Expected 1.4.0 registry version, got $($info.DisplayVersion)" }
+          $actual = [IO.Path]::GetFullPath([string]$info.InstallLocation).TrimEnd('\')
+          $expected = [IO.Path]::GetFullPath($target).TrimEnd('\')
+          if ($actual -ine $expected) { throw "Unexpected InstallLocation: $actual != $expected" }
+
+      - name: Build 1.4.0 to 1.4.1 delta ZIP
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force update-output-141 | Out-Null
+          python build_tools/build_update_zip.py `
+            --baseline ../baseline-installed `
+            --current dist/SRTVoiceStudio `
+            --output-dir update-output-141 `
+            --from-version 1.4.0 `
+            --to-version 1.4.1 `
+            --baseline-commit ea5a169334fe1135964186df9d523846c74e2828 `
+            --baseline-run 35058721774
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify delta is small and contains voice expansion
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          import json,zipfile
+          from pathlib import Path
+          out=Path('update-output-141')
+          m=json.loads((out/'update_manifest.json').read_text('utf-8'))
+          assert m['from_version']=='1.4.0' and m['to_version']=='1.4.1'
+          assert m['stats']['changed_file_count']>0
+          assert m['stats']['payload_ratio']<0.10, m['stats']
+          package=out/'SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip'
+          with zipfile.ZipFile(package) as z:
+              names=set(z.namelist())
+              assert 'Apply_Update.ps1' in names and 'Rollback_Update.ps1' in names
+              assert any(name.endswith('SRTVoiceStudio.exe') for name in names)
+          print(json.dumps(m['stats'],indent=2))
+          '@ | python -
+
+      - name: Test apply to exact 1.4.0 and exact final tree
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $package = 'update-output-141/SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip'
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'update-141-expanded'
+          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $package -DestinationPath $expanded -Force
+          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "1.4.1 updater exited with $LASTEXITCODE" }
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.1') { throw 'Registry did not reach 1.4.1.' }
+          @'
+          import hashlib
+          from pathlib import Path
+          def inv(root,ignore_unins=False):
+              out={}
+              for p in Path(root).rglob('*'):
+                  if not p.is_file(): continue
+                  rel=p.relative_to(root).as_posix()
+                  if ignore_unins and len(Path(rel).parts)==1 and Path(rel).name.lower().startswith('unins'): continue
+                  out[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
+              return out
+          actual=inv('../baseline-installed',True)
+          expected=inv('dist/SRTVoiceStudio',False)
+          assert actual==expected,(len(actual),len(expected),sorted(set(actual)^set(expected))[:20])
+          print({'exact_final_tree':True,'files':len(expected)})
+          '@ | python -
+
+      - name: Test rollback, corruption guard, and reapply
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'update-141-expanded'
+          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Rollback exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.0') { throw 'Rollback did not restore 1.4.0.' }
+
+          $manifest = Get-Content -LiteralPath (Join-Path $expanded 'update_manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+          $victimItem = @($manifest.files | Where-Object { $_.old_sha256 -and $_.path -notlike '*README*' })[0]
+          if ($null -eq $victimItem) { throw 'No replaceable delta file found for corruption test.' }
+          $victim = Join-Path $target (([string]$victimItem.path) -replace '/', '\')
+          $backup = $victim + '.guard-backup'
+          Copy-Item -LiteralPath $victim -Destination $backup -Force
+          Add-Content -LiteralPath $victim -Value 'guard-test' -Encoding ASCII
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -eq 0) { throw 'Corruption guard failed to reject modified 1.4.0 baseline.' }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.0') { throw 'Rejected update changed registry version.' }
+          Remove-Item -LiteralPath $victim -Force
+          Move-Item -LiteralPath $backup -Destination $victim -Force
+
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Reapply exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.1') { throw 'Reapply did not restore 1.4.1.' }
+
+      - name: Final checksum and acceptance summary
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $file = 'update-output-141/SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip'
+          $digest = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+          $size = (Get-Item -LiteralPath $file).Length
+          $manifest = Get-Content update-output-141/update_manifest.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          "$digest  SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip" | Set-Content update-output-141/SHA256SUMS.txt
+          [ordered]@{
+            passed=$true
+            package='SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip'
+            sha256=$digest
+            bytes=$size
+            source_version='1.4.0'
+            target_version='1.4.1'
+            us_voice_annotations=20
+            uk_voice_annotations=8
+            kokoro_japanese=5
+            optional_aivis_japanese=6
+            total_speaker_capacity=39
+            optional_voices_visible_before_install=$true
+            exact_final_tree_verified=$true
+            corruption_rejected_before_write=$true
+            persistent_rollback=$true
+            rollback_reapply_verified=$true
+            payload_ratio=$manifest.stats.payload_ratio
+          } | ConvertTo-Json | Set-Content update-output-141/final-acceptance-1.4.1.json -Encoding UTF8
+          Get-Content update-output-141/final-acceptance-1.4.1.json
+
+      - name: Upload verified 1.4.1 ZIP update
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.4.0_to_1.4.1
+          path: |
+            SRTVoiceStudio/update-output-141/SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip
+            SRTVoiceStudio/update-output-141/SHA256SUMS.txt
+            SRTVoiceStudio/update-output-141/update_manifest.json
+            SRTVoiceStudio/update-output-141/update-build.json
+            SRTVoiceStudio/update-output-141/final-acceptance-1.4.1.json
+            SRTVoiceStudio/test-results-1.4.1.xml
+          if-no-files-found: error
+          retention-days: 90
