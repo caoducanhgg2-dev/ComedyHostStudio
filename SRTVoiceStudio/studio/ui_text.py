@@ -12,17 +12,55 @@ EFFECTS={'None':'Không hiệu ứng','Deep Voice':'Giọng trầm','Bright Voic
 OVERFLOWS={'Safe Trim':'Cắt an toàn','Stop and Report':'Dừng và báo lỗi'}
 PREVIEW_LABELS={'A':'A · Giọng gốc','B':'B · Đã xử lý','C':'C · Theo mốc SRT'}
 
-# Mô tả định hướng để người dùng chọn nhanh. Đây không phải điểm chất lượng
-# và không thay thế đánh giá nghe thực tế trong ratings.csv.
+# Mô tả định hướng để người dùng chọn nhanh. Đây là chú thích biên tập,
+# không phải điểm chất lượng và không thay thế đánh giá nghe trong ratings.csv.
 VOICE_CHARACTERISTICS={
+    # Kokoro English US — 20 voices
+    'af_heart':'Ấm, thân thiện, tự nhiên',
+    'af_alloy':'Cân bằng, rõ, hiện đại',
+    'af_aoede':'Sáng, mềm, giàu biểu cảm',
+    'af_bella':'Ấm, nữ tính, hợp kể chuyện',
+    'af_jessica':'Rõ, chuyên nghiệp, hội thoại',
+    'af_kore':'Trẻ, chắc, giàu năng lượng',
+    'af_nicole':'Trầm vừa, điềm tĩnh, hợp podcast',
+    'af_nova':'Sáng, nhanh, hiện đại',
+    'af_river':'Mềm, trung tính, thư giãn',
+    'af_sarah':'Rõ, ấm, hợp thuyết minh',
+    'af_sky':'Nhẹ, trẻ, tươi sáng',
+    'am_adam':'Trầm vừa, rõ, hợp thuyết minh',
+    'am_echo':'Mềm, hiện đại, hội thoại',
+    'am_eric':'Ổn định, rõ, chuyên nghiệp',
+    'am_fenrir':'Mạnh, năng lượng, kịch tính',
+    'am_liam':'Trẻ, thân thiện, tự nhiên',
+    'am_michael':'Ấm, chắc, hợp kể chuyện',
+    'am_onyx':'Trầm, dày, hợp kể chuyện',
+    'am_puck':'Sáng, nhanh, hợp reviewer / comedy',
+    'am_santa':'Trầm ấm, chậm rãi, thiên nhân vật',
+
+    # Kokoro English UK — 8 voices
+    'bf_alice':'Rõ, thanh lịch, hợp thuyết minh',
+    'bf_emma':'Tự nhiên, thân thiện, hội thoại',
+    'bf_isabella':'Ấm, mềm, hợp kể chuyện',
+    'bf_lily':'Nhẹ, trẻ, tinh tế',
+    'bm_daniel':'Trầm vừa, rõ, chuyên nghiệp',
+    'bm_fable':'Biểu cảm, kể chuyện, thiên nhân vật',
+    'bm_george':'Ấm, chững chạc, hợp thuyết minh',
+    'bm_lewis':'Tự nhiên, bình tĩnh, hội thoại',
+
+    # Kokoro Japanese — 5 voices
     'jf_alpha':'Sáng, trẻ trung, linh hoạt',
     'jf_gongitsune':'Mềm, dịu, hợp kể chuyện',
     'jf_nezumi':'Nhẹ, đáng yêu, thiên hoạt hình',
     'jf_tebukuro':'Ấm, điềm tĩnh, tự nhiên',
     'jm_kumo':'Trầm vừa, bình tĩnh, hợp thuyết minh',
+
+    # Aivis Japanese — 6 optional local voices
     'aivis:e756b8e4-b606-4e15-99b1-3f9c6a1b2317':'Tự nhiên, mềm, hội thoại đời thường',
     'aivis:5680ac39-43c9-487a-bc3e-018c0d29cc38':'Nhẹ, ngọt, thư giãn',
-    'am_onyx':'Trầm, kể chuyện',
+    'aivis:d2c99ca6-73e5-486c-994e-ee0ce2d74928':'Trẻ, sáng, giàu cảm xúc',
+    'aivis:561e4e59-3bc9-4726-9028-44a3c12a6f1d':'Baritone, trung niên, hợp kể chuyện',
+    'aivis:41b7785f-35cc-4089-a360-dd8a63da5e75':'Trẻ, mềm, biểu cảm',
+    'aivis:bf56410a-d8e6-430d-a477-f789e16206d3':'Trẻ, tự nhiên, hội thoại',
 }
 
 def voice_characteristic(voice):
@@ -43,7 +81,8 @@ def voice_display_label(voice,fallback=None):
         return voice_label(voice)
     base=fallback or voice_label(voice)
     trait=voice_characteristic(voice)
-    return f'{base} · {trait}' if trait else base
+    if trait and trait not in str(base):return f'{base} · {trait}'
+    return base
 
 def display(value):
     for mapping in (LANGUAGES,MODES,INTENSITIES,EMOTIONS,EFFECTS,OVERFLOWS):
