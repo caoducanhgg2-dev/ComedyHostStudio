@@ -22,6 +22,13 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
         assert w.language.currentText()=='Tiếng Anh (Anh)'
         assert w.voice.count()==8 and w.voice.findData('bf_emma')>=0
         w.language.setCurrentIndex(w.language.findData('Japanese'))
+        # 1.4.2: the main dropdown must visibly expose all 11 Japanese voices
+        # even before the optional Aivis model pack is installed.
+        assert w.voice.count()==11
+        rinne=w.voice.findData('aivis:d2c99ca6-73e5-486c-994e-ee0ce2d74928')
+        assert rinne>=0 and 'Rinne El' in w.voice.itemText(rinne) and 'Chưa cài' in w.voice.itemText(rinne)
+        assert not w.voice.model().item(rinne).isEnabled()
+        assert '11 giọng' in w.voice_count.text() and '6 Aivis chưa cài' in w.voice_count.text()
         w.voice.setCurrentIndex(w.voice.findData('jm_kumo'))
         assert w.settings().voice=='jm_kumo'
         assert 'Kumo' in w.voice.currentText() and 'Trầm vừa' in w.voice.currentText()
@@ -70,7 +77,7 @@ def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,m
         assert any(p.list.item(i).data(256)=='bf_emma' for i in range(p.list.count()))
         assert any('thân thiện' in p.list.item(i).text() for i in range(p.list.count()))
         p.filter.setCurrentIndex(p.filter.findData('ja'))
-        # 1.4.1 exposes 5 installed Kokoro + 6 optional Aivis voices.
+        # 1.4.2 exposes 5 installed Kokoro + 6 optional Aivis voices.
         assert p.list.count()==11
         assert '11 giọng Nhật' in p.status.text() and '5 đã cài' in p.status.text() and '6 chờ tải' in p.status.text()
         assert any('Sáng, trẻ trung' in p.list.item(i).text() for i in range(p.list.count()))
