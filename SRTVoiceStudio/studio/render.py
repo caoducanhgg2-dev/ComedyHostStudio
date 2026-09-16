@@ -81,9 +81,10 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                               continuity_trimmed_seconds=trim_start+trim_end)
                 master[slot.start:slot.start+len(fitted)] = fitted
                 lengths.append(len(fitted))
+                shown_silence = record.get('transition_silence', record['trailing_silence']) if settings.continuous else record['trailing_silence']
                 progress(i+1, len(slots), f"Caption {c.index} • {emotion} • {settings.effect} / {settings.strength} • "
                     f"Processed {record['processed_seconds']:.2f}s / Slot {record['available_seconds']:.2f}s • "
-                    f"Fit {record['speed']:.3f}x • Silence {record['trailing_silence']:.2f}s • Overlap 0")
+                    f"Fit {record['speed']:.3f}x • Audible gap {shown_silence:.2f}s • Overlap 0")
                 records.append(record)
                 logging.info('Caption result: %s', record)
             summary = validate(slots, lengths, settings.gap_ms)
@@ -95,21 +96,29 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         for record in records:
             key = record.get('fit_status', 'GOOD')
             fit_status[key] = fit_status.get(key, 0) + 1
+        measured_silence = [
+            (r.get('transition_silence', r['trailing_silence']) if settings.continuous else r['trailing_silence'])
+            for r in records
+        ]
         summary.update(emotion_mode=settings.emotion_mode, emotion=settings.emotion,
                        effect=settings.effect, strength=settings.strength,
                        continuous_mode=bool(settings.continuous),
                        continuous_target_ms=int(settings.continuous_target_ms),
-                       continuity_trimmed_seconds=sum(r.get('continuity_trimmed_seconds',0.0) for r in records),
+                       continuity_trimmed_seconds=sum(
+                           r.get('continuity_trimmed_seconds',0.0) + r.get('post_dsp_trimmed_seconds',0.0)
+                           for r in records),
                        timeline_fit_status=fit_status,
                        speed_adjusted=sum(r['speed_up'] or r['slow_down'] for r in records),
                        speed_up_captions=sum(r['speed_up'] for r in records),
                        slow_down_captions=sum(r['slow_down'] for r in records),
                        underfilled_captions=sum(r['underfilled'] for r in records),
                        underfilled_after_hard_minimum=sum(r['underfilled_at_hard_minimum'] for r in records),
-                       average_trailing_silence=sum(r['trailing_silence'] for r in records)/len(records),
-                       median_trailing_silence=float(np.median([r['trailing_silence'] for r in records])),
-                       transitions_over_08=sum((slots[i+1].start-r['end_sample'])/RATE > .8 for i,r in enumerate(records[:-1])),
-                       maximum_trailing_silence=max(r['trailing_silence'] for r in records),
+                       average_trailing_silence=sum(measured_silence)/len(records),
+                       median_trailing_silence=float(np.median(measured_silence)),
+                       transitions_over_08=sum(
+                           (slots[i+1].start-r.get('audible_end_sample',r['end_sample']))/RATE > .8
+                           for i,r in enumerate(records[:-1])),
+                       maximum_trailing_silence=max(measured_silence),
                        safely_trimmed=sum(r['trimmed'] for r in records),
                        duration=display_time(end_ms), duration_ms=end_ms, records=records)
         progress(len(slots), len(slots), 'TIMELINE VALID • Đang mã hóa MP3')
