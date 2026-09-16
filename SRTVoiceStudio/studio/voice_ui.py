@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QListWidget,QListWidgetItem,QLabel,QPushButton,QTextBrowser,QCheckBox,QFileDialog
 from . import preferences
 from . import ui_text as vi
+from .backend import PREVIEW
 from .ratings import score,read_csv
 from .voice_catalog import catalog_voices
 
@@ -80,7 +81,7 @@ class VoicePanel(QWidget):
             else:
                 w.voice_count.setText(f'{len(choices)} giọng · Aivis đã cài đầy đủ · Chạy trên CPU')
         else:w.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
-        if w.caption_select.currentData() is None:w.preview_text.setText(w.PREVIEW[language] if hasattr(w,'PREVIEW') else __import__('studio.backend',fromlist=['PREVIEW']).PREVIEW[language])
+        if w.caption_select.currentData() is None:w.preview_text.setText(PREVIEW[language])
         w.voice_changed();w.invalidate_base()
 
     def refresh_install(self):
