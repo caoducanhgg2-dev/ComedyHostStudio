@@ -1,0 +1,230 @@
+name: Build SRT Voice Studio 1.4 Direct Recovery ZIP
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.4.0-recovery-from-user-130']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.4-user-130-recovery.yml'
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BASE_INSTALLER_RUN: '34854705948'
+  BASE_INSTALLER_SHA256: F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC
+  FROM_VERSION: 1.3.0
+  TO_VERSION: 1.4.0
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Checkout recovery source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+
+      - name: Run full acceptance tests
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-recovery.xml
+
+      - name: Build current 1.4 frozen app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+
+      - name: Frozen 1.4 smoke test
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+
+      - name: Download exact verified 1.3.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
+          github-token: ${{ github.token }}
+          path: baseline-release
+
+      - name: Stage exact verified 1.3.0 baseline
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem baseline-release -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
+          if ($null -eq $installer) { throw 'Verified 1.3.0 installer artifact is missing.' }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($hash -ne $env:BASE_INSTALLER_SHA256) { throw "1.3.0 installer SHA mismatch: $hash" }
+          $target = Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$target")
+          $p = Start-Process -FilePath $installer.FullName -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "1.3.0 installer exited with $($p.ExitCode)" }
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          $info = Get-ItemProperty -Path $reg
+          if ([string]$info.DisplayVersion -ne '1.3.0') { throw "Expected 1.3.0 registry version, got $($info.DisplayVersion)" }
+          $actual = [IO.Path]::GetFullPath([string]$info.InstallLocation).TrimEnd('\')
+          $expected = [IO.Path]::GetFullPath($target).TrimEnd('\')
+          if ($actual -ine $expected) { throw "Unexpected InstallLocation: $actual != $expected" }
+
+      - name: Build direct 1.3.0 to 1.4.0 delta with user variant hashes
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force recovery-output | Out-Null
+          python build_tools/build_update_zip.py `
+            --baseline ../baseline-installed `
+            --current dist/SRTVoiceStudio `
+            --output-dir recovery-output `
+            --from-version 1.3.0 `
+            --to-version 1.4.0 `
+            --baseline-commit 1.3.0-verified-installer `
+            --baseline-run 34854705948 `
+            --alternate-baseline-manifest build_tools/baseline_variants/1.3.0-user-installed-2026-09-16.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Add full baseline guard to recovery package
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python build_tools/harden_recovery_package.py `
+            --baseline ../baseline-installed `
+            --package recovery-output/SRTVoiceStudio_Update_1.3.0_to_1.4.0.zip `
+            --variant-manifest build_tools/baseline_variants/1.3.0-user-installed-2026-09-16.json `
+            --output recovery-output/SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip `
+            --summary recovery-output/recovery-build.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify recovery manifest contains exact user hashes
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'recovery-inspect'
+          Remove-Item -LiteralPath $expanded -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath recovery-output/SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip -DestinationPath $expanded -Force
+          @'
+          import json
+          from pathlib import Path
+          m=json.loads((Path('../recovery-inspect')/'update_manifest.json').read_text('utf-8-sig'))
+          expected={
+            'SRTVoiceStudio.exe':'76c84d7864d6e30da0c849e581258d32d54bd0432b31ea604aaaa8242f89ae13',
+            '_internal/README_VI.md':'4734fdbef3820f45118afbbd4b6b47271358ab6e4e0147de44ab5f3281a348ab',
+            '_internal/base_library.zip':'570fd04f7f0b32a1ed0bf93cc8ae1e9edde8a6cc13f9b7261fc96ec66d6b465e',
+            '_internal/fugashi-1.4.0.dist-info/RECORD':'21b11c47d9181376dca71acf41e56dd9e071f80d7a094aee02af0efac1796bc1',
+            '_internal/numpy-2.3.5.dist-info/RECORD':'fffdb3c255be49788cbab11187dd665ae3bc9aafb81af81cb6825226bad31242',
+            '_internal/onnxruntime-1.29.0.dist-info/RECORD':'d7a64b25253197c6f4fce5699587c5423a81d28a2ea81aa970a3467db83a858d',
+            '_internal/phonemizer-3.4.0.dist-info/RECORD':'0348bea987b564231cf499d1e5aa7c8fc1118a8141bea3a5b0842ac91619038c',
+            '_internal/py7zr-1.1.3.dist-info/RECORD':'45e0ca8d1b7863daec46889f973757a785b65e1b27a4281b07781919e8795a48',
+          }
+          assert m['from_version']=='1.3.0' and m['to_version']=='1.4.0'
+          g={x['path']:set(x['accepted_sha256']) for x in m['full_baseline_guard']['files']}
+          for path,sha in expected.items():
+              assert path in g and sha in g[path], (path,sha)
+          assert m['full_baseline_guard']['strict_file_set'] is True
+          assert (Path('../recovery-inspect')/'Apply_Update_Core.ps1').is_file()
+          print(json.dumps({'verified_user_hashes':len(expected),'guarded_files':len(g),'strict_file_set':True},indent=2))
+          '@ | python -
+
+      - name: Test exact baseline apply and exact final tree
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'recovery-inspect'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Recovery updater exited with $LASTEXITCODE" }
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.0') { throw 'Registry did not reach 1.4.0.' }
+          @'
+          import hashlib
+          from pathlib import Path
+          def inv(root, ignore_unins=False):
+              out={}
+              for p in Path(root).rglob('*'):
+                  if not p.is_file(): continue
+                  rel=p.relative_to(root).as_posix()
+                  if ignore_unins and len(Path(rel).parts)==1 and Path(rel).name.lower().startswith('unins'): continue
+                  out[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
+              return out
+          actual=inv('../baseline-installed', True)
+          expected=inv('dist/SRTVoiceStudio', False)
+          assert actual==expected, (len(actual),len(expected), sorted(set(actual)^set(expected))[:20])
+          print({'exact_final_tree':True,'files':len(expected)})
+          '@ | python -
+
+      - name: Test rollback, strict guard rejection, and reapply
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $expanded = Join-Path $env:GITHUB_WORKSPACE 'recovery-inspect'
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Rollback exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.3.0') { throw 'Rollback did not restore 1.3.0.' }
+
+          $target = [string](Get-ItemProperty -Path $reg).InstallLocation
+          $sentinel = Join-Path $target 'unexpected.guard-test'
+          Set-Content -LiteralPath $sentinel -Value 'guard-test' -Encoding ASCII
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -eq 0) { throw 'Strict full baseline guard failed to reject an unexpected app file.' }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.3.0') { throw 'Rejected update changed registry version.' }
+          if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Rejected update unexpectedly modified the sentinel.' }
+          Remove-Item -LiteralPath $sentinel -Force
+
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Reapply exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.4.0') { throw 'Reapply did not restore 1.4.0.' }
+
+      - name: Final checksum and acceptance summary
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $file = 'recovery-output/SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip'
+          $digest = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+          $size = (Get-Item -LiteralPath $file).Length
+          "$digest  SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip" | Set-Content recovery-output/SHA256SUMS.txt
+          [ordered]@{
+            passed=$true
+            package='SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip'
+            sha256=$digest
+            bytes=$size
+            source_registry_version='1.3.0'
+            target_version='1.4.0'
+            full_baseline_guard=$true
+            strict_file_set=$true
+            known_user_hashes=8
+            no_installer_exe_during_update=$true
+            update_stops_before_write_on_guard_failure=$true
+            persistent_rollback=$true
+            rollback_reapply_verified=$true
+            exact_final_tree_verified=$true
+          } | ConvertTo-Json | Set-Content recovery-output/final-recovery-acceptance.json -Encoding UTF8
+          Get-Content recovery-output/final-recovery-acceptance.json
+
+      - name: Upload direct recovery ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0
+          path: |
+            SRTVoiceStudio/recovery-output/SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip
+            SRTVoiceStudio/recovery-output/SHA256SUMS.txt
+            SRTVoiceStudio/recovery-output/recovery-build.json
+            SRTVoiceStudio/recovery-output/final-recovery-acceptance.json
+            SRTVoiceStudio/test-results-recovery.xml
+          if-no-files-found: error
+          retention-days: 90
