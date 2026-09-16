@@ -1,0 +1,16 @@
+{
+  "name": "user-installed-1.3.0-2026-09-16",
+  "version": "1.3.0",
+  "source": "Read-only SRTVoiceStudio_Baseline_Diagnostic generated on the user's installed app on 2026-09-16. Registry version 1.3.0; these hashes are accepted only as an explicitly verified recovery variant.",
+  "source_package_sha256": "",
+  "file_hashes": {
+    "SRTVoiceStudio.exe": "76c84d7864d6e30da0c849e581258d32d54bd0432b31ea604aaaa8242f89ae13",
+    "_internal/README_VI.md": "4734fdbef3820f45118afbbd4b6b47271358ab6e4e0147de44ab5f3281a348ab",
+    "_internal/base_library.zip": "570fd04f7f0b32a1ed0bf93cc8ae1e9edde8a6cc13f9b7261fc96ec66d6b465e",
+    "_internal/fugashi-1.4.0.dist-info/RECORD": "21b11c47d9181376dca71acf41e56dd9e071f80d7a094aee02af0efac1796bc1",
+    "_internal/numpy-2.3.5.dist-info/RECORD": "fffdb3c255be49788cbab11187dd665ae3bc9aafb81af81cb6825226bad31242",
+    "_internal/onnxruntime-1.29.0.dist-info/RECORD": "d7a64b25253197c6f4fce5699587c5423a81d28a2ea81aa970a3467db83a858d",
+    "_internal/phonemizer-3.4.0.dist-info/RECORD": "0348bea987b564231cf499d1e5aa7c8fc1118a8141bea3a5b0842ac91619038c",
+    "_internal/py7zr-1.1.3.dist-info/RECORD": "45e0ca8d1b7863daec46889f973757a785b65e1b27a4281b07781919e8795a48"
+  }
+}
