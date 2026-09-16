@@ -9,6 +9,7 @@ from .paths import workspace
 from .audio import encode, check_cancel
 from .effects import EffectProcessor
 from .fitting import fit_processed
+from .continuity import trim_edge_silence
 from .voice_backends import synthesize_selected
 
 @dataclass(frozen=True)
@@ -26,12 +27,17 @@ class Settings:
     effect: str = 'None'
     strength: str = 'Medium'
     native_style: int | None = None
+    continuous: bool = False
+    continuous_target_ms: int = 100
+
 
 def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
     if not 1.0 <= settings.speed <= 1.2:
         raise ValueError('Speed phải nằm trong 1.00–1.20x.')
     if settings.overflow not in ('Safe Trim', 'Stop and Report'):
         raise ValueError('Overflow mode không hợp lệ.')
+    if settings.continuous and not 50 <= int(settings.continuous_target_ms) <= 250:
+        raise ValueError('Continuous target phải nằm trong 50–250 ms.')
     captions = read_srt(srt)
     slots = slots_for(captions, settings.gap_ms)
     end_ms = max(c.end for c in captions)
@@ -63,10 +69,16 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                 if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
                     raise RuntimeError(f'CAPTION {c.index}: TTS trả về audio rỗng hoặc không hợp lệ.')
                 base_duration = len(samples)/rate
+                samples, trim_start, trim_end = trim_edge_silence(samples, rate, settings.continuous)
+                if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
+                    raise RuntimeError(f'CAPTION {c.index}: Continuous Voice tạo audio không hợp lệ.')
                 processed, emotion_tempo, emotion, intensity = processor.process(samples, rate, settings, c.text)
                 fitted, record = fit_processed(processed, rate, slot, settings, emotion_tempo, temp, cancel)
                 record.update(tts_seconds=base_duration, emotion=emotion, intensity=intensity,
-                              effect=settings.effect, strength=settings.strength)
+                              effect=settings.effect, strength=settings.strength,
+                              continuity_trimmed_start=trim_start,
+                              continuity_trimmed_end=trim_end,
+                              continuity_trimmed_seconds=trim_start+trim_end)
                 master[slot.start:slot.start+len(fitted)] = fitted
                 lengths.append(len(fitted))
                 progress(i+1, len(slots), f"Caption {c.index} • {emotion} • {settings.effect} / {settings.strength} • "
@@ -79,8 +91,16 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         finally:
             del master
         check_cancel(cancel)
+        fit_status = {}
+        for record in records:
+            key = record.get('fit_status', 'GOOD')
+            fit_status[key] = fit_status.get(key, 0) + 1
         summary.update(emotion_mode=settings.emotion_mode, emotion=settings.emotion,
                        effect=settings.effect, strength=settings.strength,
+                       continuous_mode=bool(settings.continuous),
+                       continuous_target_ms=int(settings.continuous_target_ms),
+                       continuity_trimmed_seconds=sum(r.get('continuity_trimmed_seconds',0.0) for r in records),
+                       timeline_fit_status=fit_status,
                        speed_adjusted=sum(r['speed_up'] or r['slow_down'] for r in records),
                        speed_up_captions=sum(r['speed_up'] for r in records),
                        slow_down_captions=sum(r['slow_down'] for r in records),
