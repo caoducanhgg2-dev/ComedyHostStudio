@@ -40,7 +40,8 @@ def main():
             from studio.diagnostics import self_test
             return self_test()
         from studio.ui import Window
-        window = Window()
+        from studio.v15_upgrade import enhance_window
+        window = enhance_window(Window())
         window.show()
         if '--ui-smoke' in sys.argv:
             from studio.ui_checks import UiChecks
