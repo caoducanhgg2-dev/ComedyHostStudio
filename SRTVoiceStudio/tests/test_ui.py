@@ -37,13 +37,16 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
     finally:
         w.close();w.deleteLater();app.processEvents()
 
-def test_japanese_voice_characteristic_labels_are_reference_hints():
+def test_voice_characteristic_labels_are_reference_hints_for_all_regions():
     assert vi.voice_label('jf_alpha')=='Alpha — Nữ · Sáng, trẻ trung, linh hoạt'
     assert 'hợp kể chuyện' in vi.voice_label('jf_gongitsune')
     assert 'hoạt hình' in vi.voice_label('jf_nezumi')
     assert 'điềm tĩnh' in vi.voice_label('jf_tebukuro')
     assert 'hợp thuyết minh' in vi.voice_label('jm_kumo')
-    assert vi.voice_characteristic('af_heart')==''
+    assert vi.voice_characteristic('af_heart')=='Ấm, thân thiện, tự nhiên'
+    assert 'reviewer / comedy' in vi.voice_label('am_puck')
+    assert 'thanh lịch' in vi.voice_label('bf_alice')
+    assert 'chững chạc' in vi.voice_label('bm_george')
 
 def test_error_dialog_has_localized_close_button(app,monkeypatch):
     seen=[]
@@ -60,14 +63,23 @@ def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,m
     w=Window()
     try:
         p=w.voice_panel
+        # Default "Đã cài" remains 33 local Kokoro voices before Aivis install.
         assert p.list.count()==33
         p.filter.setCurrentIndex(p.filter.findData('en'))
         assert p.list.count()==28
         assert any(p.list.item(i).data(256)=='bf_emma' for i in range(p.list.count()))
+        assert any('thân thiện' in p.list.item(i).text() for i in range(p.list.count()))
         p.filter.setCurrentIndex(p.filter.findData('ja'))
-        assert p.list.count()==5
+        # 1.4.1 exposes 5 installed Kokoro + 6 optional Aivis voices.
+        assert p.list.count()==11
+        assert '11 giọng Nhật' in p.status.text() and '5 đã cài' in p.status.text() and '6 chờ tải' in p.status.text()
         assert any('Sáng, trẻ trung' in p.list.item(i).text() for i in range(p.list.count()))
         assert any('Trầm vừa' in p.list.item(i).text() for i in range(p.list.count()))
+        assert any('Rinne El' in p.list.item(i).text() and 'Chưa cài' in p.list.item(i).text() for i in range(p.list.count()))
+        assert any('Aida Shigeru' in p.list.item(i).text() and 'Chưa cài' in p.list.item(i).text() for i in range(p.list.count()))
+        # Pick an installed Kokoro voice to verify favorite/use behavior remains intact.
+        installed_index=next(i for i in range(p.list.count()) if p.list.item(i).data(256)=='jf_alpha')
+        p.list.setCurrentRow(installed_index)
         selected=p.selected().id;p.toggle_favorite()
         p.filter.setCurrentIndex(p.filter.findData('favorites'))
         assert p.list.count()==1 and p.selected().id==selected
