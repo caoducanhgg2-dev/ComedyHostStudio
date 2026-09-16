@@ -10,10 +10,18 @@ from .voice_catalog import catalog_voices
 class VoicePanel(QWidget):
     def __init__(self,window):
         super().__init__();self.window=window;self.setMinimumHeight(590)
+        # 1.4.2: the main Japanese voice dropdown must expose the complete
+        # catalogue, not just backends whose model files are already installed.
+        # Missing Aivis entries stay disabled, so rendering can never route to
+        # an unavailable model accidentally.
+        try:self.window.language.currentIndexChanged.disconnect(self.window.language_changed)
+        except (TypeError,RuntimeError):pass
+        self.window.language_changed=self.refresh_main_language
+        self.window.language.currentIndexChanged.connect(self.window.language_changed)
         saved=preferences.read().get('favorite_voices',[])
         self.favorites=set(x for x in saved if isinstance(x,str)) if isinstance(saved,list) else set()
         layout=QVBoxLayout(self)
-        layout.addWidget(QLabel('THƯ VIỆN GIỌNG • Giọng tùy chọn vẫn hiện trước khi tải model để bạn biết chính xác bản này có gì'))
+        layout.addWidget(QLabel('THƯ VIỆN GIỌNG • Giọng Aivis chưa tải vẫn hiện trong dropdown Tiếng Nhật và trong thư viện'))
         self.filter=QComboBox()
         for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Tiếng Anh','en'),('Tiếng Nhật','ja'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
         self.filter.setCurrentIndex(1);layout.addWidget(self.filter)
@@ -34,6 +42,46 @@ class VoicePanel(QWidget):
         self.list.currentItemChanged.connect(self.selection)
         self.use.clicked.connect(self.select_voice);self.favorite.clicked.connect(self.toggle_favorite)
         self.refresh();self.refresh_install()
+
+    def refresh_main_language(self,*_):
+        """Populate the main dropdown with installed voices plus Aivis stubs.
+
+        The backend router remains authoritative for synthesis. Catalogue-only
+        voices are deliberately disabled until their local model pack exists.
+        """
+        w=self.window
+        language=w.language.currentData()
+        installed_list=[v for v in w.backend.list_voices() if v.language==language]
+        installed={v.id:v for v in installed_list}
+        choices=list(installed_list)
+        if language=='Japanese':
+            for voice in catalog_voices():
+                if voice.id not in installed:choices.append(voice)
+        old=w.voice.blockSignals(True)
+        w.voice.clear()
+        for voice in choices:
+            is_installed=voice.id in installed
+            if voice.engine=='Kokoro':label=vi.voice_label(voice.id)
+            elif is_installed:label=voice.name+'  ·  Aivis'
+            else:label=voice.name+'  ·  [Aivis • Chưa cài]'
+            w.voice.addItem(label,voice.id)
+            index=w.voice.count()-1
+            w.voice.setItemData(index,
+                'Sẵn sàng dùng offline' if is_installed else 'Chưa cài model • Mở tab Thư viện giọng để tải Aivis Nhật',
+                Qt.ToolTipRole)
+            if not is_installed:
+                item=w.voice.model().item(index)
+                if item is not None:item.setEnabled(False)
+        w.voice.blockSignals(old)
+        if language=='Japanese':
+            missing=max(0,len(choices)-len(installed_list))
+            if missing:
+                w.voice_count.setText(f'{len(choices)} giọng · {len(installed_list)} đã cài · {missing} Aivis chưa cài')
+            else:
+                w.voice_count.setText(f'{len(choices)} giọng · Aivis đã cài đầy đủ · Chạy trên CPU')
+        else:w.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
+        if w.caption_select.currentData() is None:w.preview_text.setText(w.PREVIEW[language] if hasattr(w,'PREVIEW') else __import__('studio.backend',fromlist=['PREVIEW']).PREVIEW[language])
+        w.voice_changed();w.invalidate_base()
 
     def refresh_install(self):
         installed=self.window.aivis_pack.available();complete=self.window.aivis_pack.complete()
@@ -80,7 +128,7 @@ class VoicePanel(QWidget):
         elif mode=='ja':
             installed_ja=sum(1 for v in self.voices.values() if v.language=='Japanese' and v.id in self.installed_ids)
             total_ja=sum(1 for v in self.voices.values() if v.language=='Japanese')
-            text=f'{total_ja} giọng Nhật trong bản 1.4.1 • {installed_ja} đã cài • {total_ja-installed_ja} chờ tải model.'
+            text=f'{total_ja} giọng Nhật trong bản 1.4.2 • {installed_ja} đã cài • {total_ja-installed_ja} chờ tải model.'
         else:
             text=f'{self.list.count()} giọng • Chú thích đặc tính chỉ để chọn nhanh; không phải điểm chất lượng.'
         self.status.setText(text);self.selection()
