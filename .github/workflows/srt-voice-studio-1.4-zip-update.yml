@@ -111,7 +111,10 @@ jobs:
           $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
           $info = Get-ItemProperty -Path $reg
           if ([string]$info.DisplayVersion -ne '1.3.0') { throw "Failed to stage 1.3.0 baseline: $($info.DisplayVersion)" }
-          if ([IO.Path]::GetFullPath([string]$info.InstallLocation) -ne [IO.Path]::GetFullPath($target)) { throw '1.3.0 InstallLocation changed unexpectedly.' }
+          $normalize = { param([string]$p) if ([string]::IsNullOrWhiteSpace($p)) { return '' }; [IO.Path]::GetFullPath($p.Trim().TrimEnd('\','/')).TrimEnd('\','/') }
+          $registeredTarget = & $normalize ([string]$info.InstallLocation)
+          $expectedTarget = & $normalize $target
+          if (-not [string]::Equals($registeredTarget,$expectedTarget,[StringComparison]::OrdinalIgnoreCase)) { throw "1.3.0 InstallLocation changed unexpectedly. Registry='$registeredTarget' Expected='$expectedTarget'" }
           New-Item -ItemType Directory -Force SRTVoiceStudio/update-output | Out-Null
           [ordered]@{baseline_version='1.3.0';baseline_run=$env:BASELINE_RUN;install_path=$target;base_installer_run=$env:BASE_INSTALLER_RUN;base_installer_sha256=$installerHash;source='exact verified 1.3.0 installer artifact'} | ConvertTo-Json | Set-Content SRTVoiceStudio/update-output/baseline-release.json -Encoding UTF8
 
