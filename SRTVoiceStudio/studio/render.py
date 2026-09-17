@@ -11,6 +11,7 @@ from .effects import EffectProcessor
 from .fitting import fit_processed
 from .continuity import trim_edge_silence
 from .voice_backends import synthesize_selected
+from .sfx import mix_auto_sfx, DENSITIES, STRENGTHS
 
 @dataclass(frozen=True)
 class Settings:
@@ -29,6 +30,9 @@ class Settings:
     native_style: int | None = None
     continuous: bool = False
     continuous_target_ms: int = 100
+    auto_sfx: bool = False
+    sfx_density: str = 'Balanced'
+    sfx_strength: str = 'Medium'
 
 
 def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
@@ -38,6 +42,8 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         raise ValueError('Overflow mode không hợp lệ.')
     if settings.continuous and not 50 <= int(settings.continuous_target_ms) <= 250:
         raise ValueError('Continuous target phải nằm trong 50–250 ms.')
+    if settings.sfx_density not in DENSITIES or settings.sfx_strength not in STRENGTHS:
+        raise ValueError('Cấu hình Auto SFX không hợp lệ.')
     captions = read_srt(srt)
     slots = slots_for(captions, settings.gap_ms)
     end_ms = max(c.end for c in captions)
@@ -48,6 +54,7 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         raise ValueError('Không ghi đè SRT gốc.')
     output.parent.mkdir(parents=True, exist_ok=True)
     lengths, records = [], []
+    sfx_report = dict(enabled=False, planned=0, mixed=0, rejected=0, events=[], max_mix_peak=0.0)
     logging.info('Render settings: %s', asdict(settings))
     # Master is disk-backed; even long input cannot allocate hours of PCM in RAM.
     with tempfile.TemporaryDirectory(prefix='job-', dir=workspace()) as temp:
@@ -88,6 +95,10 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                 records.append(record)
                 logging.info('Caption result: %s', record)
             summary = validate(slots, lengths, settings.gap_ms)
+            check_cancel(cancel)
+            if settings.auto_sfx:
+                progress(len(slots), len(slots), 'TIMELINE VALID • Auto SFX: đang phân tích và kiểm tra artifact')
+            sfx_report = mix_auto_sfx(master, captions, settings, RATE)
             master.flush()
         finally:
             del master
@@ -120,8 +131,17 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                            for i,r in enumerate(records[:-1])),
                        maximum_trailing_silence=max(measured_silence),
                        safely_trimmed=sum(r['trimmed'] for r in records),
+                       auto_sfx=bool(settings.auto_sfx),
+                       sfx_density=settings.sfx_density,
+                       sfx_strength=settings.sfx_strength,
+                       sfx_planned=int(sfx_report.get('planned',0)),
+                       sfx_mixed=int(sfx_report.get('mixed',0)),
+                       sfx_rejected=int(sfx_report.get('rejected',0)),
+                       sfx_max_mix_peak=float(sfx_report.get('max_mix_peak',0.0)),
+                       sfx_events=sfx_report.get('events',[]),
                        duration=display_time(end_ms), duration_ms=end_ms, records=records)
-        progress(len(slots), len(slots), 'TIMELINE VALID • Đang mã hóa MP3')
+        progress(len(slots), len(slots),
+                 f"TIMELINE VALID • SFX {summary['sfx_mixed']}/{summary['sfx_planned']} • Đang mã hóa MP3")
         # Stage in the destination filesystem so publishing is atomic on any drive.
         # Register this path for recovery after a process crash.
         fd, staged = tempfile.mkstemp(prefix='.srtvs-', suffix='.mp3', dir=output.parent)
@@ -134,5 +154,5 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         finally:
             Path(staged).unlink(missing_ok=True)
         summary['output'] = str(output)
-        logging.info('TIMELINE VALID: %s', {k:v for k,v in summary.items() if k != 'records'})
+        logging.info('TIMELINE VALID: %s', {k:v for k,v in summary.items() if k not in ('records','sfx_events')})
         return summary
