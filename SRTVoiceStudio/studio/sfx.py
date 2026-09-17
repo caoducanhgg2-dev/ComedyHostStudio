@@ -6,7 +6,8 @@ Design goals:
 - every event starts/ends at zero with mandatory fades;
 - reject non-finite, DC-heavy, clicky, clipped or high-frequency-heavy audio;
 - mix SFX *under* the already rendered voice and reduce/skip it when headroom is low;
-- conservative text cue detection, at most one event per caption and a minimum event spacing.
+- conservative text cue detection, at most one event per caption and a minimum event spacing;
+- place the event near the triggering word inside long captions, not blindly at caption start.
 
 The safety gate is intentionally fail-closed: a rejected SFX is omitted while the
 voice render continues normally.
@@ -28,6 +29,14 @@ KIND_LABELS = {
     'suspense': 'Nhấn hồi hộp',
     'transition': 'Transition tick',
     'accent': 'Accent nhẹ',
+}
+KIND_DURATION_MS = {
+    'impact': 240,
+    'chime': 540,
+    'comic': 340,
+    'suspense': 480,
+    'transition': 260,
+    'accent': 160,
 }
 
 @dataclass(frozen=True)
@@ -91,8 +100,29 @@ def classify_sfx(text: str, language: str, density: str = 'Balanced'):
     return kind, int(score), str(hit)
 
 
+def _cue_anchor_ms(caption, reason: str, kind: str, language: str) -> int:
+    """Approximate cue position from text proportion, while keeping full SFX in-caption."""
+    raw = str(caption.text or '')
+    value = raw if language == 'Japanese' else raw.casefold()
+    needle = reason if language == 'Japanese' else reason.casefold()
+    pos = value.find(needle) if needle and needle != 'dấu câu nhấn mạnh' else -1
+    if pos >= 0:
+        ratio = (pos + max(1, len(needle)) * .5) / max(1, len(value))
+    else:
+        marks = [p for p in (value.find('!'), value.find('！'), value.find('?'), value.find('？')) if p >= 0]
+        ratio = ((min(marks) + .5) / max(1, len(value))) if marks else .10
+    ratio = max(.04, min(.92, ratio))
+    span = max(1, int(caption.end - caption.start))
+    desired = int(caption.start + span * ratio)
+    earliest = int(caption.start + 45)
+    latest = int(caption.end - KIND_DURATION_MS[kind] - 45)
+    if latest < earliest:
+        return earliest
+    return max(earliest, min(latest, desired))
+
+
 def plan_sfx(captions, language: str, density: str = 'Balanced'):
-    """Plan conservative events without touching audio."""
+    """Plan conservative, cue-aligned events without touching audio."""
     if density not in DENSITIES:
         raise ValueError('SFX density không hợp lệ.')
     min_spacing = {'Sparse': 6000, 'Balanced': 3500, 'Energetic': 2200}[density]
@@ -103,10 +133,11 @@ def plan_sfx(captions, language: str, density: str = 'Balanced'):
         if result is None:
             continue
         kind, score, reason = result
-        if caption.start - last_ms < min_spacing:
+        anchor = _cue_anchor_ms(caption, reason, kind, language)
+        if anchor - last_ms < min_spacing:
             continue
-        events.append(SfxEvent(caption.index, int(caption.start), kind, score, reason))
-        last_ms = caption.start
+        events.append(SfxEvent(caption.index, anchor, kind, score, reason))
+        last_ms = anchor
     return events
 
 
@@ -129,9 +160,8 @@ def _finish(raw, attack, release, rate=RATE):
     x = np.asarray(raw, dtype=np.float64).reshape(-1)
     env = _envelope(len(x), attack, release, rate)
     x *= env
-    # Remove residual DC *after* the asymmetric decay/envelope. Subtract a
-    # correction shaped by the same zero-edge envelope, so exact zero starts
-    # and ends are preserved and no click is introduced.
+    # Remove residual DC after the asymmetric decay/envelope. Subtract a
+    # correction shaped by the same zero-edge envelope so no click is created.
     if len(x):
         mean_env = float(np.mean(env))
         if mean_env > 1e-12:
@@ -148,8 +178,7 @@ def synthesize_sfx(kind: str, seed_text: str = '', rate: int = RATE):
     """Create one clean mono effect natively at ``rate``; never resample it."""
     if rate != RATE:
         raise ValueError('Auto SFX chỉ tạo trực tiếp ở master 48 kHz.')
-    # The seed is retained in the API so future procedural variations remain
-    # deterministic; current clean profiles intentionally avoid random noise.
+    # Keep a deterministic seed contract without introducing broadband random noise.
     hashlib.sha256(str(seed_text).encode('utf-8')).digest()
     if kind == 'impact':
         duration = .24; t = np.arange(round(rate * duration)) / rate
@@ -243,7 +272,7 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
             report.append(dict(caption=caption.index, kind=event.kind, mixed=False,
                                reason='qa:' + ','.join(qa['reasons'])))
             continue
-        start = int(caption.start * 48 + round(.045 * rate))
+        start = int(event.start_ms * 48)
         hard_stop = min(len(master), int(caption.end * 48))
         if hard_stop - start < round(.07 * rate):
             rejected += 1
@@ -285,9 +314,10 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
             continue
         master[start:stop] = candidate
         mixed += 1; max_peak = max(max_peak, float(np.max(np.abs(candidate))))
-        report.append(dict(caption=caption.index, kind=event.kind, label=KIND_LABELS[event.kind],
-                           score=event.score, trigger=event.reason, mixed=True, gain=float(gain),
-                           qa_peak=qa['peak'], high_frequency_ratio=qa['high_frequency_ratio']))
+        report.append(dict(caption=caption.index, start_ms=event.start_ms, kind=event.kind,
+                           label=KIND_LABELS[event.kind], score=event.score, trigger=event.reason,
+                           mixed=True, gain=float(gain), qa_peak=qa['peak'],
+                           high_frequency_ratio=qa['high_frequency_ratio']))
     return dict(enabled=True, planned=len(events), mixed=mixed, rejected=rejected,
                 density=density, strength=strength, events=report, max_mix_peak=max_peak)
 
