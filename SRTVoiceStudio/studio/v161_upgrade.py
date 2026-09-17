@@ -125,5 +125,16 @@ def enhance_window_v161(window):
     _install_render_reporting(window)
     from .v161_multifile import install_multifile_workspace
     install_multifile_workspace(window)
+
+    # Base Window.finished() re-enables the main Generate button unconditionally.
+    # Re-sync the unified queue afterwards so a fully processed queue stays disabled
+    # until the user adds/retries a file.
+    base_finished = window.finished
+    def finished_161():
+        base_finished()
+        if hasattr(window, 'multi_file_panel'):
+            window.multi_file_panel.refresh()
+    window.finished = finished_161
+
     window.status.setText('Sẵn sàng · 1.6.1: 1/nhiều SRT dùng chung tùy chọn + Auto SFX audibility')
     return window
