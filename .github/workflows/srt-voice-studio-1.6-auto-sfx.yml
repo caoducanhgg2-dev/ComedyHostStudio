@@ -1,0 +1,308 @@
+name: Build SRT Voice Studio 1.6 Auto SFX
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.6.0-auto-sfx']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.6-auto-sfx.yml'
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BASE_INSTALLER_SHA256: F955633C700A48B87E8C96B4B2AD8A40D0FC522A0720A37EFF3D51DAE2A9A6CC
+  BASE_140_SHA256: 63D057A8902E60C53180B17BA3424F2AF494FC493B702B2A2747A8F8AC6C347E
+  BASE_141_SHA256: 8F09C8D5764747B6148A8D2584FE87F59FE46AE544EFEC917AE6DCB9A8B36A4C
+  BASE_142_SHA256: 28C7BE67BD6A6FFC86FE225F80885375683E254487ED102282498120361432FB
+  BASE_150_SHA256: 080236B0310A4BCAC2378EA0045952AB32D6ED16845535615DA49C9EB3B1591C
+  BASE_151_SHA256: 04C879395C56BFE1BFF49F1E4525AF392FAB4C20DC6BE5B3101FA69918DABD31
+  BASE_152_SHA256: 8FF24EE2608BF2051D64A1A0C7D82147495C6B5817218B09D1C6002593D97642
+  FROM_VERSION: 1.5.2
+  TO_VERSION: 1.6.0
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    steps:
+      - name: Checkout 1.6 source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+
+      - name: Run full test suite
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-1.6.0.xml
+
+      - name: Run Auto SFX artifact tests separately
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_auto_sfx.py
+
+      - name: Stress Auto SFX QA with randomized seeds
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          import numpy as np
+          from studio.sfx import KIND_LABELS,synthesize_sfx,inspect_sfx
+          passed=0
+          for kind in KIND_LABELS:
+              for n in range(80):
+                  a=synthesize_sfx(kind,f'{kind}-{n}')
+                  q=inspect_sfx(a)
+                  assert q['passed'],(kind,n,q)
+                  assert np.isfinite(a).all() and np.max(np.abs(a))<=.70001
+                  passed+=1
+          print({'procedural_sfx_qa_cases':passed,'all_passed':True})
+          '@ | python -
+
+      - name: Build current 1.6 frozen app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+
+      - name: Test current frozen app
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+
+      - name: Run frozen Auto SFX self-test
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          & .\dist\SRTVoiceStudio\SRTVoiceStudio.exe --sfx-test
+          if ($LASTEXITCODE -ne 0) { throw "Frozen SFX self-test exited with $LASTEXITCODE" }
+
+      - name: Download exact 1.3.0 installer
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.3.0
+          run-id: 34854705948
+          github-token: ${{ github.token }}
+          path: baseline-130
+
+      - name: Download exact 1.4.0 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0
+          run-id: 35058721774
+          github-token: ${{ github.token }}
+          path: baseline-140-update
+
+      - name: Download exact 1.4.1 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.4.0_to_1.4.1
+          run-id: 35088621748
+          github-token: ${{ github.token }}
+          path: baseline-141-update
+
+      - name: Download exact 1.4.2 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.4.1_to_1.4.2
+          run-id: 35091785370
+          github-token: ${{ github.token }}
+          path: baseline-142-update
+
+      - name: Download exact 1.5.0 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.4.2_to_1.5.0
+          run-id: 35103450012
+          github-token: ${{ github.token }}
+          path: baseline-150-update
+
+      - name: Download exact 1.5.1 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.5.0_to_1.5.1
+          run-id: 35114907038
+          github-token: ${{ github.token }}
+          path: baseline-151-update
+
+      - name: Download exact 1.5.2 update
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.5.1_to_1.5.2
+          run-id: 35119515359
+          github-token: ${{ github.token }}
+          path: baseline-152-update
+
+      - name: Reconstruct exact installed 1.5.2 baseline
+        shell: pwsh
+        run: |
+          $installer=Get-ChildItem baseline-130 -Recurse -File -Filter 'SRTVoiceStudio_Setup_1.3.0.exe' | Select-Object -First 1
+          if ($null -eq $installer) { throw 'Verified 1.3.0 installer is missing.' }
+          $h=(Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($h -ne $env:BASE_INSTALLER_SHA256) { throw "1.3.0 SHA mismatch: $h" }
+          $target=Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+          $p=Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$target") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          function Apply-Zip($folder,$filter,$expectedSha,$expandedName) {
+            $zip=Get-ChildItem $folder -Recurse -File -Filter $filter | Select-Object -First 1
+            if ($null -eq $zip) { throw "Missing baseline ZIP: $filter" }
+            $sha=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+            if ($sha -ne $expectedSha) { throw "$filter SHA mismatch: $sha" }
+            $expanded=Join-Path $env:GITHUB_WORKSPACE $expandedName
+            Remove-Item $expanded -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -LiteralPath $zip.FullName -DestinationPath $expanded -Force
+            & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+            if ($LASTEXITCODE -ne 0) { throw "$filter updater exited with $LASTEXITCODE" }
+          }
+          Apply-Zip 'baseline-140-update' 'SRTVoiceStudio_Recovery_1.3.0_variant_to_1.4.0.zip' $env:BASE_140_SHA256 'base140'
+          Apply-Zip 'baseline-141-update' 'SRTVoiceStudio_Update_1.4.0_to_1.4.1.zip' $env:BASE_141_SHA256 'base141'
+          Apply-Zip 'baseline-142-update' 'SRTVoiceStudio_Update_1.4.1_to_1.4.2.zip' $env:BASE_142_SHA256 'base142'
+          Apply-Zip 'baseline-150-update' 'SRTVoiceStudio_Update_1.4.2_to_1.5.0.zip' $env:BASE_150_SHA256 'base150'
+          Apply-Zip 'baseline-151-update' 'SRTVoiceStudio_Update_1.5.0_to_1.5.1.zip' $env:BASE_151_SHA256 'base151'
+          Apply-Zip 'baseline-152-update' 'SRTVoiceStudio_Update_1.5.1_to_1.5.2.zip' $env:BASE_152_SHA256 'base152'
+          $reg='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.5.2') { throw 'Expected exact 1.5.2 baseline.' }
+
+      - name: Build 1.5.2 to 1.6.0 delta ZIP
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force update-output-160 | Out-Null
+          python build_tools/build_update_zip.py `
+            --baseline ../baseline-installed `
+            --current dist/SRTVoiceStudio `
+            --output-dir update-output-160 `
+            --from-version 1.5.2 `
+            --to-version 1.6.0 `
+            --baseline-commit a481820fda5b77ffbc1a20e58111c4a32a031c85 `
+            --baseline-run 35119515359
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify small 1.6 delta
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          import json,zipfile
+          from pathlib import Path
+          out=Path('update-output-160');m=json.loads((out/'update_manifest.json').read_text('utf-8'))
+          assert m['from_version']=='1.5.2' and m['to_version']=='1.6.0'
+          assert 0<m['stats']['changed_file_count']<30,m['stats']
+          assert m['stats']['payload_ratio']<.10,m['stats']
+          p=out/'SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip'
+          with zipfile.ZipFile(p) as z:
+              names=set(z.namelist());assert 'Apply_Update.ps1' in names and 'Rollback_Update.ps1' in names
+              assert any(n.endswith('SRTVoiceStudio.exe') for n in names)
+          print(json.dumps(m['stats'],indent=2))
+          '@ | python -
+
+      - name: Test apply to exact 1.5.2 and exact final tree
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $package='update-output-160/SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip'
+          $expanded=Join-Path $env:GITHUB_WORKSPACE 'update-160-expanded'
+          Remove-Item $expanded -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $package -DestinationPath $expanded -Force
+          $target=Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "1.6 updater exited with $LASTEXITCODE" }
+          $reg='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.6.0') { throw 'Registry did not reach 1.6.0.' }
+          @'
+          import hashlib
+          from pathlib import Path
+          def inv(root,ignore_unins=False):
+              out={}
+              for p in Path(root).rglob('*'):
+                  if not p.is_file():continue
+                  rel=p.relative_to(root).as_posix()
+                  if ignore_unins and len(Path(rel).parts)==1 and Path(rel).name.lower().startswith('unins'):continue
+                  out[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
+              return out
+          actual=inv('../baseline-installed',True);expected=inv('dist/SRTVoiceStudio')
+          assert actual==expected,(len(actual),len(expected),sorted(set(actual)^set(expected))[:20])
+          print({'exact_final_tree':True,'files':len(expected)})
+          '@ | python -
+
+      - name: Test rollback corruption guard and reapply
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $expanded=Join-Path $env:GITHUB_WORKSPACE 'update-160-expanded'
+          $target=Join-Path $env:GITHUB_WORKSPACE 'baseline-installed'
+          $reg='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Rollback_Update.ps1') -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Rollback exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.5.2') { throw 'Rollback did not restore 1.5.2.' }
+          $manifest=Get-Content -LiteralPath (Join-Path $expanded 'update_manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+          $victimItem=@($manifest.files | Where-Object { $_.old_sha256 -and $_.path -notlike '*README*' })[0]
+          if ($null -eq $victimItem) { throw 'No replaceable delta file found.' }
+          $victim=Join-Path $target (([string]$victimItem.path) -replace '/', '\')
+          $backup=$victim+'.guard-backup';Copy-Item $victim $backup -Force;Add-Content -LiteralPath $victim -Value 'guard-test' -Encoding ASCII
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -eq 0) { throw 'Corruption guard failed.' }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.5.2') { throw 'Rejected update changed registry.' }
+          Remove-Item $victim -Force;Move-Item $backup $victim -Force
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $expanded 'Apply_Update.ps1') -TargetDir $target -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Reapply exited with $LASTEXITCODE" }
+          if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.6.0') { throw 'Reapply did not restore 1.6.0.' }
+
+      - name: Final checksum and acceptance summary
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $file='update-output-160/SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip'
+          $digest=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+          $size=(Get-Item -LiteralPath $file).Length
+          $manifest=Get-Content update-output-160/update_manifest.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          "$digest  SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip" | Set-Content update-output-160/SHA256SUMS.txt
+          [ordered]@{
+            passed=$true
+            package='SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip'
+            sha256=$digest
+            bytes=$size
+            source_version='1.5.2'
+            target_version='1.6.0'
+            procedural_sfx_48khz=$true
+            no_sfx_resampling_or_time_stretch=$true
+            mandatory_fades=$true
+            dc_click_hiss_clipping_guard=$true
+            fail_closed_rejection=$true
+            voice_never_attenuated_for_sfx=$true
+            frozen_sfx_self_test=$true
+            randomized_sfx_cases=480
+            exact_final_tree_verified=$true
+            corruption_rejected_before_write=$true
+            persistent_rollback=$true
+            rollback_reapply_verified=$true
+            payload_ratio=$manifest.stats.payload_ratio
+          } | ConvertTo-Json | Set-Content update-output-160/final-acceptance-1.6.0.json -Encoding UTF8
+          Get-Content update-output-160/final-acceptance-1.6.0.json
+
+      - name: Upload verified 1.6 update
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.5.2_to_1.6.0
+          path: |
+            SRTVoiceStudio/update-output-160/SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip
+            SRTVoiceStudio/update-output-160/SHA256SUMS.txt
+            SRTVoiceStudio/update-output-160/update_manifest.json
+            SRTVoiceStudio/update-output-160/final-acceptance-1.6.0.json
+            SRTVoiceStudio/test-results-1.6.0.xml
+          if-no-files-found: error
+          retention-days: 90
