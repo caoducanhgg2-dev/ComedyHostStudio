@@ -97,7 +97,7 @@ def test_mix_fail_closed_when_disabled():
     assert np.array_equal(master,before)
 
 
-def test_v16_window_exposes_auto_sfx_and_settings(app,tmp_path,monkeypatch):
+def test_v16_window_exposes_manual_auto_sfx_toggle_and_settings(app,tmp_path,monkeypatch):
     monkeypatch.setenv('LOCALAPPDATA',str(tmp_path))
     from studio.ui import Window
     from studio.v16_upgrade import enhance_window_v16
@@ -105,11 +105,46 @@ def test_v16_window_exposes_auto_sfx_and_settings(app,tmp_path,monkeypatch):
     try:
         names=[w.tabs.tabText(i) for i in range(w.tabs.count())]
         assert 'Auto SFX 1.6' in names
+        assert w.sfx_panel.enabled.isChecked() is False
+        assert 'TẮT' in w.sfx_panel.status.text()
+        assert w.sfx_panel.density.isEnabled() is False
+        assert w.sfx_panel.strength.isEnabled() is False
+
         w.sfx_panel.enabled.setChecked(True)
+        assert 'BẬT' in w.sfx_panel.status.text()
+        assert w.sfx_panel.density.isEnabled() is True
+        assert w.sfx_panel.strength.isEnabled() is True
         w.sfx_panel._set_combo(w.sfx_panel.density,'Balanced')
         w.sfx_panel._set_combo(w.sfx_panel.strength,'Medium')
         s=w.settings()
         assert s.auto_sfx is True and s.sfx_density=='Balanced' and s.sfx_strength=='Medium'
+
+        w.sfx_panel.enabled.setChecked(False)
+        assert w.settings().auto_sfx is False
+        assert 'TẮT' in w.sfx_panel.status.text()
         assert w.preset_panel.preset.count()>=5
+    finally:
+        w.close();w.deleteLater();app.processEvents()
+
+
+def test_presets_never_change_manual_sfx_on_off_state(app,tmp_path,monkeypatch):
+    monkeypatch.setenv('LOCALAPPDATA',str(tmp_path))
+    from studio.ui import Window
+    from studio.v16_upgrade import enhance_window_v16
+    w=enhance_window_v16(Window())
+    try:
+        # OFF remains OFF when any built-in preset is applied.
+        w.sfx_panel.enabled.setChecked(False)
+        for i in range(w.preset_panel.preset.count()):
+            w.preset_panel.preset.setCurrentIndex(i)
+            w.preset_panel.apply.click()
+            assert w.sfx_panel.enabled.isChecked() is False
+
+        # ON remains ON as well; presets may suggest density/strength only.
+        w.sfx_panel.enabled.setChecked(True)
+        for i in range(w.preset_panel.preset.count()):
+            w.preset_panel.preset.setCurrentIndex(i)
+            w.preset_panel.apply.click()
+            assert w.sfx_panel.enabled.isChecked() is True
     finally:
         w.close();w.deleteLater();app.processEvents()
