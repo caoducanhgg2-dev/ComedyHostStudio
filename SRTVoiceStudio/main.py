@@ -30,6 +30,9 @@ def main():
             if '--'+name+'-test' in sys.argv:
                 from studio.upgrade_checks import run_test
                 return run_test(name)
+        if '--sfx-test' in sys.argv:
+            from studio.sfx import self_test
+            return self_test()
         if '--underfill-test' in sys.argv:
             from studio.underfill_checks import underfill_test
             return underfill_test()
@@ -40,9 +43,9 @@ def main():
             from studio.diagnostics import self_test
             return self_test()
         from studio.ui import Window
-        from studio.v15_upgrade import enhance_window
+        from studio.v16_upgrade import enhance_window_v16
         from studio.hotfix_151 import stabilize_qactions
-        window = stabilize_qactions(enhance_window(Window()))
+        window = stabilize_qactions(enhance_window_v16(Window()))
         window.show()
         if '--ui-smoke' in sys.argv:
             from studio.ui_checks import UiChecks
