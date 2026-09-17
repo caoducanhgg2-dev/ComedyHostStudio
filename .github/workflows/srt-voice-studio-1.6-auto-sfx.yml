@@ -57,7 +57,7 @@ jobs:
         working-directory: SRTVoiceStudio
         run: python -m pytest -q tests/test_auto_sfx.py
 
-      - name: Stress Auto SFX QA with randomized seeds
+      - name: Stress Auto SFX QA across profiles
         working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
@@ -72,7 +72,7 @@ jobs:
                   assert q['passed'],(kind,n,q)
                   assert np.isfinite(a).all() and np.max(np.abs(a))<=.70001
                   passed+=1
-          print({'procedural_sfx_qa_cases':passed,'all_passed':True})
+          print({'procedural_sfx_qa_iterations':passed,'all_passed':True})
           '@ | python -
 
       - name: Build current 1.6 frozen app
@@ -87,8 +87,10 @@ jobs:
         working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
-          & .\dist\SRTVoiceStudio\SRTVoiceStudio.exe --sfx-test
-          if ($LASTEXITCODE -ne 0) { throw "Frozen SFX self-test exited with $LASTEXITCODE" }
+          $exe = Resolve-Path '.\dist\SRTVoiceStudio\SRTVoiceStudio.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--sfx-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Frozen SFX self-test exited with $($p.ExitCode)" }
+          Write-Host 'Frozen Auto SFX self-test: PASS'
 
       - name: Download exact 1.3.0 installer
         uses: actions/download-artifact@v4
@@ -285,7 +287,7 @@ jobs:
             fail_closed_rejection=$true
             voice_never_attenuated_for_sfx=$true
             frozen_sfx_self_test=$true
-            randomized_sfx_cases=480
+            sfx_qa_iterations=480
             exact_final_tree_verified=$true
             corruption_rejected_before_write=$true
             persistent_rollback=$true
