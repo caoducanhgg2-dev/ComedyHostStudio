@@ -36,7 +36,8 @@ class AutoSfxPanel(QWidget):
         note.setWordWrap(True); layout.addWidget(note)
 
         row = QHBoxLayout()
-        self.enabled = QCheckBox('Bật Auto SFX')
+        self.enabled = QCheckBox('Dùng Auto SFX · bật / tắt thủ công')
+        self.enabled.setToolTip('Chỉ khi bạn tự bật nút này app mới chèn SFX. Preset không được tự ý thay đổi trạng thái SFX.')
         self.density = QComboBox(); self.strength = QComboBox()
         for key in DENSITIES: self.density.addItem(DENSITY_LABELS[key], key)
         for key in STRENGTHS: self.strength.addItem(STRENGTH_LABELS[key], key)
@@ -54,7 +55,7 @@ class AutoSfxPanel(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         layout.addWidget(self.table, 1)
-        self.status = QLabel('Auto SFX đang tắt. Voice render không bị thay đổi cho tới khi bạn bật tính năng này.')
+        self.status = QLabel('Auto SFX: TẮT · MP3 chỉ có voice, không chèn hiệu ứng âm thanh.')
         self.status.setWordWrap(True); layout.addWidget(self.status)
 
         saved = read_preferences().get('settings', {})
@@ -78,7 +79,7 @@ class AutoSfxPanel(QWidget):
         self.enabled.setChecked(True)
         self._set_combo(self.density, 'Balanced')
         self._set_combo(self.strength, 'Medium')
-        self.status.setText('Đã chọn cấu hình an toàn: Cân bằng + Mức vừa + artifact guard bắt buộc.')
+        self.status.setText('Auto SFX: BẬT · cấu hình an toàn Cân bằng + Mức vừa + artifact guard bắt buộc.')
         self.refresh()
 
     def _changed(self, *_):
@@ -86,7 +87,9 @@ class AutoSfxPanel(QWidget):
         self.density.setEnabled(enabled and not self.window.busy())
         self.strength.setEnabled(enabled and not self.window.busy())
         if enabled:
-            self.status.setText('Auto SFX bật · SFX lỗi sẽ bị bỏ thay vì đưa vào MP3.')
+            self.status.setText('Auto SFX: BẬT · SFX lỗi sẽ bị bỏ thay vì đưa vào MP3.')
+        else:
+            self.status.setText('Auto SFX: TẮT · MP3 chỉ có voice, không chèn hiệu ứng âm thanh.')
 
     def refresh(self, *_):
         path = Path(self.window.file.text().strip())
@@ -101,7 +104,8 @@ class AutoSfxPanel(QWidget):
                           str(event.score), event.reason]
                 for col, value in enumerate(values): self.table.setItem(row, col, QTableWidgetItem(value))
             if events:
-                self.status.setText(f'Dự kiến {len(events)} SFX. Đây chỉ là kế hoạch; lúc render từng SFX còn phải qua QA âm thanh và headroom guard.')
+                prefix = 'Đang BẬT' if self.enabled.isChecked() else 'Đang TẮT · chỉ xem trước kế hoạch'
+                self.status.setText(f'Auto SFX {prefix}: dự kiến {len(events)} SFX. Khi render, từng SFX còn phải qua QA âm thanh và headroom guard.')
             else:
                 self.status.setText('Không có cue đủ mạnh ở mật độ hiện tại. App sẽ không chèn SFX cưỡng ép.')
         except Exception as exc:
@@ -116,16 +120,19 @@ class AutoSfxPanel(QWidget):
 
 
 def _patch_builtin_presets():
+    # Presets may suggest density/strength, but must never silently enable or
+    # disable Auto SFX.  The on/off state belongs exclusively to the user toggle.
     values = {
-        'JP TikTok Comedy': (True, 'Balanced', 'Medium'),
-        'US Reviewer': (True, 'Balanced', 'Medium'),
-        'Renovation Calm': (False, 'Sparse', 'Light'),
-        'Horror Narration': (True, 'Sparse', 'Light'),
-        'Food Challenge': (True, 'Energetic', 'Medium'),
+        'JP TikTok Comedy': ('Balanced', 'Medium'),
+        'US Reviewer': ('Balanced', 'Medium'),
+        'Renovation Calm': ('Sparse', 'Light'),
+        'Horror Narration': ('Sparse', 'Light'),
+        'Food Challenge': ('Energetic', 'Medium'),
     }
-    for name, (enabled, density, strength) in values.items():
+    for name, (density, strength) in values.items():
         if name in v15_core.BUILTIN_PRESETS:
-            v15_core.BUILTIN_PRESETS[name].update(auto_sfx=enabled, sfx_density=density, sfx_strength=strength)
+            v15_core.BUILTIN_PRESETS[name].pop('auto_sfx', None)
+            v15_core.BUILTIN_PRESETS[name].update(sfx_density=density, sfx_strength=strength)
 
 
 def _apply_sfx(window, settings):
@@ -144,10 +151,12 @@ def _patch_preset_apply(window):
     def apply_selected():
         name = panel.preset.currentData()
         if not name: return
+        # Applying a preset must not silently switch Auto SFX on or off.
+        manual_sfx_state = window.sfx_panel.enabled.isChecked()
         settings = v15_core.settings_from_mapping(panel.data[name])
         actual = apply_settings(window, settings)
-        _apply_sfx(window, settings)
-        panel.status.setText(f'Đã áp dụng {name}.' + (' Giọng preset chưa cài nên đã dùng giọng khả dụng đầu tiên.' if actual.voice != settings.voice else ''))
+        _apply_sfx(window, replace(settings, auto_sfx=manual_sfx_state))
+        panel.status.setText(f'Đã áp dụng {name}. Auto SFX vẫn giữ {"BẬT" if manual_sfx_state else "TẮT"} theo lựa chọn của bạn.' + (' Giọng preset chưa cài nên đã dùng giọng khả dụng đầu tiên.' if actual.voice != settings.voice else ''))
     panel.apply.clicked.connect(apply_selected)
 
 
@@ -182,5 +191,5 @@ def enhance_window_v16(window):
             for action in menu.actions():
                 if action.text() == 'Nạp cấu hình đã lưu':
                     action.triggered.connect(lambda: _load_sfx(window))
-    window.status.setText('Sẵn sàng · 1.6: Auto SFX sạch âm + Smart Fit 2.0 + Batch + Voice Compare + Preset')
+    window.status.setText('Sẵn sàng · 1.6: Auto SFX tùy chọn + Smart Fit 2.0 + Batch + Voice Compare + Preset')
     return window
