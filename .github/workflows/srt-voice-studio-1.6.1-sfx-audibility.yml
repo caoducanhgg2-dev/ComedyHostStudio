@@ -41,6 +41,10 @@ jobs:
         working-directory: SRTVoiceStudio
         run: python -m pytest -q --junitxml=test-results-1.6.1.xml
 
+      - name: Run unified one-many SRT regression tests separately
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_multifile_161.py
+
       - name: Run 1.6.1 audibility regression tests separately
         working-directory: SRTVoiceStudio
         run: python -m pytest -q tests/test_sfx_161.py
