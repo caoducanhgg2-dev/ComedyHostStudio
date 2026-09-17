@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import re
 import numpy as np
 
 from .timeline import RATE
@@ -47,9 +46,9 @@ def _contains(value: str, phrases) -> int:
 def classify_sfx(text: str, language: str, density: str = 'Balanced'):
     """Return ``(kind, score, reason)`` or ``None``.
 
-    Rules are intentionally lexical and deterministic.  Auto SFX must never
-    invent scene events from weak context.  Sparse requires a strong cue;
-    Balanced accepts normal semantic cues; Energetic may also use punctuation.
+    Rules are intentionally lexical and deterministic. Auto SFX never invents
+    scene events from weak context. Sparse requires a strong cue; Balanced
+    accepts normal semantic cues; Energetic may also use punctuation.
     """
     if density not in DENSITIES:
         raise ValueError('SFX density không hợp lệ.')
@@ -128,11 +127,20 @@ def _tone(freq: float, t, phase=0.0):
 
 def _finish(raw, attack, release, rate=RATE):
     x = np.asarray(raw, dtype=np.float64).reshape(-1)
-    x -= float(np.mean(x)) if len(x) else 0.0
-    x *= _envelope(len(x), attack, release, rate)
+    env = _envelope(len(x), attack, release, rate)
+    x *= env
+    # Remove residual DC *after* the asymmetric decay/envelope. Subtract a
+    # correction shaped by the same zero-edge envelope, so exact zero starts
+    # and ends are preserved and no click is introduced.
+    if len(x):
+        mean_env = float(np.mean(env))
+        if mean_env > 1e-12:
+            x -= (float(np.mean(x)) / mean_env) * env
     peak = float(np.max(np.abs(x))) if len(x) else 0.0
     if peak > 1e-12:
         x *= 0.58 / peak
+    if len(x):
+        x[0] = 0.0; x[-1] = 0.0
     return x.astype(np.float32)
 
 
@@ -140,8 +148,9 @@ def synthesize_sfx(kind: str, seed_text: str = '', rate: int = RATE):
     """Create one clean mono effect natively at ``rate``; never resample it."""
     if rate != RATE:
         raise ValueError('Auto SFX chỉ tạo trực tiếp ở master 48 kHz.')
-    seed = int.from_bytes(hashlib.sha256(str(seed_text).encode('utf-8')).digest()[:4], 'little')
-    rng = np.random.default_rng(seed)
+    # The seed is retained in the API so future procedural variations remain
+    # deterministic; current clean profiles intentionally avoid random noise.
+    hashlib.sha256(str(seed_text).encode('utf-8')).digest()
     if kind == 'impact':
         duration = .24; t = np.arange(round(rate * duration)) / rate
         decay = np.exp(-t * 13.0)
@@ -167,7 +176,6 @@ def synthesize_sfx(kind: str, seed_text: str = '', rate: int = RATE):
         return _finish(raw, .055, .120, rate)
     if kind == 'transition':
         duration = .26; t = np.arange(round(rate * duration)) / rate
-        # Short, fixed-frequency harmonic tick; deliberately no pitch sweep.
         raw = (_tone(520, t) + .35 * _tone(780, t, .2)) * np.exp(-t * 12.0)
         return _finish(raw, .008, .070, rate)
     if kind == 'accent':
@@ -235,8 +243,6 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
             report.append(dict(caption=caption.index, kind=event.kind, mixed=False,
                                reason='qa:' + ','.join(qa['reasons'])))
             continue
-        # Start just after caption onset; keep the effect entirely inside the
-        # caption range.  Truncation is followed by a fresh release fade.
         start = int(caption.start * 48 + round(.045 * rate))
         hard_stop = min(len(master), int(caption.end * 48))
         if hard_stop - start < round(.07 * rate):
@@ -293,7 +299,6 @@ def self_test():
         qa = inspect_sfx(a)
         if not qa['passed']:
             raise RuntimeError(f'SFX {kind} failed QA: {qa}')
-    # Deliberately bad signals must be rejected.
     bad = np.ones(round(.2 * RATE), dtype=np.float32) * .4
     if inspect_sfx(bad)['passed']:
         raise RuntimeError('SFX QA failed to reject DC/click signal.')
