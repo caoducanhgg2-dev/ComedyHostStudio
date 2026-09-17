@@ -26,6 +26,10 @@ def main():
     try:
         logging.info('SRT Voice Studio %s', __version__)
         clean_stale()
+        # 1.6.1 patches Auto SFX before render/UI import so every path, including
+        # frozen self-tests, uses the audibility-tuned mixer and synthesis.
+        from studio.sfx_161 import apply_patch
+        apply_patch()
         for name in ('batch','underfill-v2','install-voice','optional-voices','voice-benchmark'):
             if '--'+name+'-test' in sys.argv:
                 from studio.upgrade_checks import run_test
@@ -43,9 +47,9 @@ def main():
             from studio.diagnostics import self_test
             return self_test()
         from studio.ui import Window
-        from studio.v16_upgrade import enhance_window_v16
+        from studio.v161_upgrade import enhance_window_v161
         from studio.hotfix_151 import stabilize_qactions
-        window = stabilize_qactions(enhance_window_v16(Window()))
+        window = stabilize_qactions(enhance_window_v161(Window()))
         window.show()
         if '--ui-smoke' in sys.argv:
             from studio.ui_checks import UiChecks
