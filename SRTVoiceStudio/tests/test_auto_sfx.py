@@ -64,6 +64,16 @@ def test_planner_limits_density_and_never_forces_weak_cues():
     assert len({e.caption_index for e in events})==len(events)
 
 
+def test_planner_aligns_event_near_trigger_inside_long_caption():
+    text='We inspect the room, check the floor, move the tools, and after all that the project is finally completed successfully.'
+    cap=Caption(1,1000,11000,text)
+    event=plan_sfx([cap],'English US','Balanced')[0]
+    assert event.kind=='chime'
+    assert 6500 < event.start_ms < 10450
+    assert event.start_ms >= cap.start+45
+    assert event.start_ms+540 <= cap.end-45
+
+
 def test_mix_keeps_voice_and_headroom_safe():
     caps=[Caption(1,0,4000,'Finally the project is completed successfully!'),
           Caption(2,4100,8100,'This is a normal line without a sound cue.')]
@@ -74,7 +84,6 @@ def test_mix_keeps_voice_and_headroom_safe():
     report=mix_auto_sfx(master,caps,settings)
     assert report['planned']==1 and report['mixed']==1 and report['rejected']==0
     assert np.isfinite(master).all() and float(np.max(np.abs(master)))<=.88001
-    # SFX is local; distant voice samples remain bit-identical.
     a=round(2.0*RATE);b=round(2.2*RATE)
     assert np.array_equal(master[a:b],before[a:b])
     assert not np.array_equal(master, before)
