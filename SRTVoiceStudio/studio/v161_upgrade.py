@@ -106,7 +106,7 @@ def _install_render_reporting(window):
         current = window.report.toPlainText().rstrip()
         window.report.setPlainText(current + ('\n\n' if current else '') + details)
         if hasattr(window, 'sfx_panel'):
-            window.sfx_panel.status.setText(status + ' · xem báo cáo kết quả bên dưới tab Một tệp / Nghe thử.')
+            window.sfx_panel.status.setText(status + ' · xem báo cáo kết quả bên dưới tab Tệp / Nghe thử.')
 
     # Worker.start() resolves self.success dynamically through its lambda, so an
     # instance-level wrapper is sufficient and avoids touching the verified UI.
@@ -123,5 +123,7 @@ def enhance_window_v161(window):
         title.setText('Auto SFX 1.6.1 · rõ hơn trên loa điện thoại/laptop · anti-click · fail-closed QA')
     _install_sfx_preview(window)
     _install_render_reporting(window)
-    window.status.setText('Sẵn sàng · 1.6.1: Auto SFX audibility + preview + báo cáo mixed/rejected')
+    from .v161_multifile import install_multifile_workspace
+    install_multifile_workspace(window)
+    window.status.setText('Sẵn sàng · 1.6.1: 1/nhiều SRT dùng chung tùy chọn + Auto SFX audibility')
     return window
