@@ -5,7 +5,9 @@ inverse atempo (no optional rubberband library). All tails precede timeline fit.
 """
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import re
+import tempfile
 import numpy as np
 from .audio import run, check_cancel
 from .paths import executable
@@ -118,25 +120,53 @@ class EffectProcessor:
             raise ValueError('Audio rỗng hoặc không hợp lệ.')
         if not filters:
             return original.copy()
-        source, target = self.folder/'effect-in.raw', self.folder/'effect-out.raw'
-        try:
-            original.astype('<f4').tofile(source)
-            run([executable('ffmpeg'),'-nostdin','-v','error','-y',
-                 '-f','f32le','-ar',str(rate),'-ac','1','-i',str(source),
-                 '-af',','.join(filters),'-ar',str(rate),'-ac','1','-f','f32le',str(target)],self.cancel)
-            result = np.fromfile(target,dtype='<f4').copy()
-            if not len(result) or not np.isfinite(result).all():
-                raise RuntimeError('Effect trả về audio không hợp lệ.')
-            # Pitch-only transformations preserve duration. Echo tails are never removed here.
-            if duration_samples is not None:
-                result = np.pad(result, (0, max(0, duration_samples-len(result))))[:duration_samples]
-            peak = float(np.max(np.abs(result)))
-            if peak > .95:
-                result *= .95/peak
-            return result
-        finally:
-            source.unlink(missing_ok=True)
-            target.unlink(missing_ok=True)
+        self.folder.mkdir(parents=True, exist_ok=True)
+
+        def attempt():
+            # Never reuse fixed raw filenames. Preview, diagnostics and batch may
+            # overlap in the same workspace on Windows; unique files eliminate
+            # delete/read races and stale zero-byte targets.
+            source_fd, source_name = tempfile.mkstemp(prefix='effect-in-', suffix='.raw', dir=self.folder)
+            target_fd, target_name = tempfile.mkstemp(prefix='effect-out-', suffix='.raw', dir=self.folder)
+            os.close(source_fd); os.close(target_fd)
+            source, target = Path(source_name), Path(target_name)
+            try:
+                # FFmpeg should create the output itself. Removing the empty file
+                # from mkstemp also prevents a successful run from being confused
+                # with a pre-existing zero-byte placeholder.
+                target.unlink(missing_ok=True)
+                original.astype('<f4').tofile(source)
+                run([executable('ffmpeg'),'-nostdin','-v','error','-y',
+                     '-f','f32le','-ar',str(rate),'-ac','1','-i',str(source),
+                     '-af',','.join(filters),'-ar',str(rate),'-ac','1','-f','f32le',str(target)],self.cancel)
+                if not target.is_file() or target.stat().st_size < 4:
+                    return None
+                result = np.fromfile(target,dtype='<f4').copy()
+                if not len(result):
+                    return None
+                if not np.isfinite(result).all():
+                    raise RuntimeError('Effect trả về mẫu không hữu hạn.')
+                return result
+            finally:
+                source.unlink(missing_ok=True)
+                target.unlink(missing_ok=True)
+
+        # A successful FFmpeg process that yields a zero-byte target is treated
+        # as transient IO and retried once with completely fresh paths. Command
+        # failures and non-finite samples still fail immediately.
+        result = attempt()
+        if result is None:
+            check_cancel(self.cancel)
+            result = attempt()
+        if result is None:
+            raise RuntimeError('Effect trả về audio rỗng sau 2 lần xử lý độc lập.')
+        # Pitch-only transformations preserve duration. Echo tails are never removed here.
+        if duration_samples is not None:
+            result = np.pad(result, (0, max(0, duration_samples-len(result))))[:duration_samples]
+        peak = float(np.max(np.abs(result)))
+        if peak > .95:
+            result *= .95/peak
+        return result
 
     def apply_emotion(self, samples, rate, emotion, intensity):
         profile, k = EMOTIONS[emotion], LEVELS[intensity]
