@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 import numpy as np
 import pytest
-from studio.timeline import parse, slots_for, validate, TimelineError
+from studio.timeline import parse, slots_for, validate, TimelineError, AUTO_GAP_MS
 from studio.render import render, Settings
 from studio.audio import Cancelled, run
 from studio.paths import executable
@@ -50,6 +50,31 @@ def test_overlapping_srt_shrinks_slot():
     slots = slots_for(c,100)
     assert slots[0].end == 1900*48
     validate(slots,[1900*48,2000*48],100)
+
+def test_adaptive_timeline_reuses_existing_100ms_gap_without_overlap():
+    c = parse('1\n00:00:00,000 --> 00:00:01,000\nA\n\n2\n00:00:01,100 --> 00:00:02,500\nB')
+    slots = slots_for(c)
+    assert slots[0].end == 1070*48
+    report = validate(slots,[1050*48,1000*48],AUTO_GAP_MS)
+    assert report['overlaps'] == 0 and report['adaptive_timeline']
+
+
+def test_adaptive_timeline_extends_past_original_end_but_never_next_start():
+    c = parse('1\n00:00:00,000 --> 00:00:02,000\nA\n\n2\n00:00:02,100 --> 00:00:04,000\nB')
+    auto = slots_for(c)
+    fixed = slots_for(c,100)
+    assert fixed[0].end == 2000*48
+    assert auto[0].end == 2070*48
+    assert auto[0].end < auto[1].start
+
+
+def test_adaptive_guard_shrinks_on_tight_start_spacing():
+    c = [Caption(1,0,40,'A'), Caption(2,50,100,'B')]
+    slots = slots_for(c)
+    # 10% of the 50 ms start spacing = 5 ms safety.
+    assert slots[0].end == 45*48
+    assert slots[0].end < slots[1].start
+
 
 def test_validator_rejects_boundary_violation():
     slots = slots_for(parse(make_srt(2)))
