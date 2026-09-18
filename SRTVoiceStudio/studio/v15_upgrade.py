@@ -205,9 +205,11 @@ class PresetPanel(QWidget):
 
     def show_details(self,*_):
         name=self.preset.currentData();value=self.data.get(name,{})
+        gap=value.get('gap_ms',-1)
+        gap_label='Tự động' if gap < 0 else f'{gap/1000:.2f}s'
         lines=[f'Tên: {name}',f'Loại: {"Có sẵn" if name in BUILTIN_PRESETS else "Tự tạo"}',
             f"Ngôn ngữ: {value.get('language','—')}",f"Giọng: {value.get('voice','—')}",
-            f"Speed: {value.get('speed',1):.2f}× · Gap: {value.get('gap_ms',100)/1000:.2f}s",
+            f"Speed: {value.get('speed',1):.2f}× · Gap: {gap_label}",
             f"Cảm xúc: {value.get('emotion','Natural')} · FX: {value.get('effect','None')}",
             f"Continuous Voice: {'Bật' if value.get('continuous') else 'Tắt'} · Target: {value.get('continuous_target_ms',100)} ms"]
         self.details.setPlainText('\n'.join(lines));self.delete.setEnabled(bool(name) and name not in BUILTIN_PRESETS)
