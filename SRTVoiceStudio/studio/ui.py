@@ -16,7 +16,7 @@ from .paths import workspace
 from .audio import Cancelled, wav_bytes
 from .effects import EMOTIONS, EFFECTS, LEVELS
 from .preview import PreviewCache
-from .timeline import read_srt, slots_for, RATE
+from .timeline import read_srt, slots_for, RATE, AUTO_GAP_MS
 from . import __version__
 from . import ui_text as vi
 
@@ -186,18 +186,20 @@ class Window(QMainWindow):
         timing_row = QHBoxLayout()
         self.speed = QDoubleSpinBox(); self.speed.setRange(1,1.2); self.speed.setSingleStep(.01); self.speed.setValue(1); self.speed.setSuffix('×')
         self.gap = QComboBox()
-        for ms in (0,50,100,150,200): self.gap.addItem(f'{ms/1000:.2f} giây',ms)
-        self.gap.setCurrentIndex(2)
+        self.gap.addItem('Tự động · không đè voice', AUTO_GAP_MS)
+        for ms in (0,50,100,150,200): self.gap.addItem(f'Cố định {ms/1000:.2f} giây',ms)
+        self.gap.setCurrentIndex(0)
+        self.gap.setToolTip('Tự động giữ nguyên START của SRT, dùng START câu kế tiếp làm biên cứng và tự thu khoảng an toàn khi timeline chật.')
         self.overflow = combo(vi.OVERFLOWS)
         self.overflow.setToolTip('Cắt an toàn có thể cắt từ cuối câu quá dài. Dừng và báo lỗi giữ nguyên MP3 cũ để bạn sửa SRT.')
-        for label,control in [('Tốc độ gốc',self.speed),('Khoảng cách tối thiểu',self.gap),('Câu quá dài',self.overflow)]:
+        for label,control in [('Tốc độ gốc',self.speed),('Khoảng an toàn',self.gap),('Câu quá dài',self.overflow)]:
             field(timing_row,label,control)
         timeline_box.addLayout(timing_row)
         self.adaptive = QCheckBox('Tự căn câu ngắn / dài (0.88–1.20×)'); self.adaptive.setChecked(True)
-        self.adaptive.setToolTip('Mục tiêu im lặng cuối khung 0.20 giây. Không chậm dưới 0.88×; câu quá ngắn vẫn có thể còn khoảng lặng.')
+        self.adaptive.setToolTip('Tự fit voice trong slot mà không đổi START. Ưu tiên nhịp tự nhiên; chỉ tăng/giảm tốc khi cần và tuyệt đối không chồng sang câu kế tiếp.')
         self.normalize = QCheckBox('Cân bằng âm lượng'); self.normalize.setChecked(True)
         timeline_box.addWidget(self.adaptive); timeline_box.addWidget(self.normalize)
-        for text in ('Khóa mốc bắt đầu theo SRT','Không chồng tiếng','Tự dọn âm thanh tạm'):
+        for text in ('Khóa mốc bắt đầu theo SRT','Adaptive Timeline · tự xử lý gap SRT','Không chồng tiếng','Tự dọn âm thanh tạm'):
             check=QCheckBox(text); check.setChecked(True); check.setEnabled(False); timeline_box.addWidget(check)
         left.addStretch()
         preview_box = group('⑥  Nghe thử giọng A / B / C', right)
@@ -556,6 +558,7 @@ class Window(QMainWindow):
                 f"Cảm xúc: {vi.display(result['emotion_mode'])} / {emotion_label} · Hiệu ứng: {vi.display(result['effect'])} / {vi.display(result['strength'])}\n"
                 f"Tăng tốc: {result['speed_up_captions']} · Giảm tốc: {result['slow_down_captions']} · Cắt an toàn: {trimmed}\n"
                 f"Chưa lấp đầy: {underfilled} · Còn thiếu ở giới hạn 0.88×: {result['underfilled_after_hard_minimum']}\n"
+                f"Timeline: {'Tự động · theo START kế tiếp' if result.get('adaptive_timeline') else 'Khoảng cách cố định'} · Không chồng tiếng\n"
                 f"Im lặng cuối khung — Trung bình: {result['average_trailing_silence']:.3f} giây · Trung vị: {result['median_trailing_silence']:.3f} giây · Lớn nhất: {result['maximum_trailing_silence']:.3f} giây\n"
                 f"{result['overlaps']} chồng tiếng · MỐC THỜI GIAN HỢP LỆ")
 
