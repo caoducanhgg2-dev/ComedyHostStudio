@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 
 RATE = 48000
+AUTO_GAP_MS = -1
+AUTO_SAFETY_MAX_MS = 30
 
 class TimelineError(ValueError):
     pass
@@ -63,31 +65,64 @@ def read_srt(path):
     except UnicodeError as exc:
         raise TimelineError('SRT phải lưu bằng UTF-8 hoặc UTF-8 BOM.') from exc
 
-def slots_for(captions, gap_ms=100):
-    if gap_ms not in (0, 50, 100, 150, 200):
+def _auto_safety_ms(current, following):
+    """Tiny guard only; the next START is the real hard boundary.
+
+    For normal caption spacing this keeps 30 ms between rendered voices. For
+    extremely tight SRTs the guard shrinks automatically so the current
+    caption still has a usable slot. The original END is advisory in auto mode:
+    a voice may use otherwise-unused silence up to the next START.
+    """
+    distance = following.start - current.start
+    return min(AUTO_SAFETY_MAX_MS, max(0, distance // 10))
+
+def slots_for(captions, gap_ms=AUTO_GAP_MS):
+    if gap_ms not in (AUTO_GAP_MS, 0, 50, 100, 150, 200):
         raise TimelineError('Minimum Gap không hợp lệ.')
     if not captions:
         raise TimelineError('SRT rỗng.')
     slots = []
     for i, c in enumerate(captions):
-        end = min(c.end, captions[i+1].start - gap_ms) if i+1 < len(captions) else c.end
+        if i + 1 < len(captions):
+            following = captions[i + 1]
+            if gap_ms == AUTO_GAP_MS:
+                # Adaptive Timeline: preserve START, use the next START as the
+                # hard boundary, and only reserve a tiny automatic safety gap.
+                # This intentionally may extend beyond the original SRT END.
+                end = following.start - _auto_safety_ms(c, following)
+            else:
+                end = min(c.end, following.start - gap_ms)
+        else:
+            end = c.end
         if end <= c.start:
-            raise TimelineError(f'CAPTION {c.index}: không còn slot sau khi trừ gap {gap_ms} ms. Hãy sửa SRT hoặc giảm gap.')
+            mode = 'tự động' if gap_ms == AUTO_GAP_MS else f'{gap_ms} ms'
+            raise TimelineError(f'CAPTION {c.index}: không còn slot với khoảng an toàn {mode}. Hãy sửa START của SRT.')
         slots.append(Slot(c, c.start * 48, end * 48))
     return slots
 
-def validate(slots, lengths, gap_ms):
+def validate(slots, lengths, gap_ms=AUTO_GAP_MS):
     if len(slots) != len(lengths):
         raise TimelineError('Thiếu caption audio.')
     overlaps = 0
     for i, (slot, n) in enumerate(zip(slots, lengths)):
         if n <= 0 or slot.start + n > slot.end:
             raise TimelineError(f'CAPTION {slot.caption.index}: audio ngoài slot.')
-        if i+1 < len(slots) and slot.start + n + gap_ms * 48 > slots[i+1].start:
-            overlaps += 1
+        if i + 1 < len(slots):
+            voice_end = slot.start + n
+            next_start = slots[i + 1].start
+            if gap_ms == AUTO_GAP_MS:
+                if voice_end > next_start:
+                    overlaps += 1
+            elif voice_end + gap_ms * 48 > next_start:
+                overlaps += 1
     if overlaps:
         raise TimelineError(f'Không export: {overlaps} overlaps.')
-    return {'total': len(slots), 'valid': len(slots), 'overlaps': overlaps}
+    return {
+        'total': len(slots),
+        'valid': len(slots),
+        'overlaps': overlaps,
+        'adaptive_timeline': gap_ms == AUTO_GAP_MS,
+    }
 
 def display_time(ms):
     return f'{ms//60000:02d}:{ms//1000%60:02d}.{ms%1000:03d}'
