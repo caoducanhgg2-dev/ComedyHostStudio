@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 import numpy as np
-from .timeline import read_srt, slots_for, validate, RATE, display_time, TimelineError
+from .timeline import read_srt, slots_for, validate, RATE, display_time, TimelineError, AUTO_GAP_MS
 from .paths import workspace
 from .audio import encode, check_cancel
 from .effects import EffectProcessor
@@ -16,7 +16,7 @@ class Settings:
     language: str = 'English US'
     voice: str = 'af_heart'
     speed: float = 1.0
-    gap_ms: int = 100
+    gap_ms: int = AUTO_GAP_MS
     adaptive: bool = True
     loudness: bool = True
     overflow: str = 'Safe Trim'
@@ -81,6 +81,8 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         check_cancel(cancel)
         summary.update(emotion_mode=settings.emotion_mode, emotion=settings.emotion,
                        effect=settings.effect, strength=settings.strength,
+                       timeline_mode='Adaptive' if settings.gap_ms == AUTO_GAP_MS else 'Fixed',
+                       requested_gap_ms=settings.gap_ms,
                        speed_adjusted=sum(r['speed_up'] or r['slow_down'] for r in records),
                        speed_up_captions=sum(r['speed_up'] for r in records),
                        slow_down_captions=sum(r['slow_down'] for r in records),
