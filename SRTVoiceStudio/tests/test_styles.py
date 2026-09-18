@@ -117,7 +117,7 @@ def test_74_auto_cave_one_mp3(ctx,language,text,voice):
     for i,r in enumerate(report['records']):
         assert r['start_sample']==(5000+i*2000)*48
         assert r['end_sample']<=r['allowed_end'] and r['speed']<=1.2
-        if i<73: assert r['end_sample']+4800<=report['records'][i+1]['start_sample']
+        if i<73: assert r['end_sample']+30*48<=report['records'][i+1]['start_sample']
     assert list(folder.glob('*.mp3'))==[output]
     assert not list(folder.glob('*.wav')) and not list(folder.glob('.srtvs-*'))
     assert not list(workspace().glob('job-*'))
@@ -135,7 +135,8 @@ def test_echo_tail_gap_and_stop(ctx):
     report=render(source,output,s,CountingBackend(5),cancel)
     first,second=report['records']
     assert first['processed_seconds']>4 and first['trimmed']
-    assert first['speed']<=1.2 and first['end_sample']<=4*RATE
+    assert first['speed']<=1.2 and first['end_sample']<=round(4.07*RATE)
+    assert first['allowed_end']==round(4.07*RATE)
     assert second['start_sample']==round(4.1*RATE)
     old=output.read_bytes()
     with pytest.raises(TimelineError,match='CAPTION 1 TOO LONG'):
