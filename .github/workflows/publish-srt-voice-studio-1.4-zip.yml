@@ -1,0 +1,132 @@
+name: Publish SRT Voice Studio 1.4 ZIP Update
+
+on:
+  push:
+    branches:
+      - srt-voice-studio/1.4.0
+    paths:
+      - .github/workflows/publish-srt-voice-studio-1.4-zip.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  VERIFIED_RUN: '35346190194'
+  VERIFIED_COMMIT: c2a14093ba06b3b592cbdb4c3bdc247beb762efd
+  UPDATE_SHA256: 9DE840708144EA3002B68499E1D01DA905847DDBD68174611E88F203C0694DAF
+  UPDATE_BYTES: '9284049'
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download exact verified ZIP update artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.3.0_to_1.4.0
+          path: verified
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          run-id: ${{ env.VERIFIED_RUN }}
+
+      - name: Verify package and prepare release assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Get-ChildItem -Path verified -Recurse -File -Filter 'SRTVoiceStudio_Update_1.3.0_to_1.4.0.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'Verified update ZIP not found in artifact.' }
+
+          $actual = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actual -ne $env:UPDATE_SHA256) {
+            throw "Update ZIP SHA-256 mismatch. Expected $env:UPDATE_SHA256, got $actual"
+          }
+          if ($zip.Length -ne [int64]$env:UPDATE_BYTES) {
+            throw "Update ZIP size mismatch. Expected $env:UPDATE_BYTES, got $($zip.Length)"
+          }
+
+          $exe = Get-ChildItem -Path verified -Recurse -File -Filter '*.exe'
+          if ($exe) { throw 'ZIP-only release must not contain a full installer EXE.' }
+
+          New-Item -ItemType Directory -Force release_assets | Out-Null
+          Copy-Item -LiteralPath $zip.FullName -Destination release_assets
+          foreach ($name in @(
+            'SHA256SUMS.txt',
+            'update_manifest.json',
+            'update-build.json',
+            'update-acceptance.json',
+            'final-acceptance.json',
+            'baseline-release.json',
+            'update-rules.json',
+            'test-results.xml'
+          )) {
+            $item = Get-ChildItem -Path verified -Recurse -File -Filter $name | Select-Object -First 1
+            if ($item) { Copy-Item -LiteralPath $item.FullName -Destination release_assets }
+          }
+
+          @"
+          SRT Voice Studio 1.4.0 - ZIP Update
+
+          Ban nen bat buoc: SRT Voice Studio 1.3.0 verified.
+          KHONG CAN cai 1.3.1.
+          Goi nay cap nhat truc tiep: 1.3.0 -> 1.4.0.
+          Khong chay lai installer EXE.
+
+          Cach cap nhat:
+          1. Dong SRT Voice Studio.
+          2. Giai nen SRTVoiceStudio_Update_1.3.0_to_1.4.0.zip.
+          3. Chay Apply_Update.cmd.
+          4. Doi thong bao UPDATE SUCCESS.
+          5. Neu can quay lai 1.3.0, chay Rollback_Update.cmd.
+
+          Verified source commit: $env:VERIFIED_COMMIT
+          Verified ZIP workflow run: $env:VERIFIED_RUN
+          ZIP SHA-256: $env:UPDATE_SHA256
+          ZIP bytes: $env:UPDATE_BYTES
+
+          Adaptive Timeline 1.4:
+          - Khong bat buoc gap 0.10 giay.
+          - Giu nguyen START cua SRT.
+          - Tu dung khoang trong toi truoc START cau ke tiep.
+          - Safety guard tu co toi da khoang 30 ms.
+          - Overlap bat buoc = 0.
+          "@ | Set-Content release_assets/HUONG_DAN_SRTVoiceStudio_1.4.0.txt -Encoding UTF8
+
+          Get-ChildItem release_assets -File | Sort-Object Name | ForEach-Object {
+            $h=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+            "$h *$($_.Name)"
+          } | Set-Content release_assets/SHA256SUMS_RELEASE.txt -Encoding ASCII
+
+          Get-ChildItem release_assets | Format-Table Name,Length
+
+      - name: Create or update GitHub Release and upload ZIP-only assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'srt-voice-studio-v1.4.0'
+          $title = 'SRT Voice Studio 1.4.0 - Verified ZIP Update'
+          $notes = @"
+          Verified ZIP-only update from SRT Voice Studio 1.3.0 to 1.4.0.
+
+          Source commit: $env:VERIFIED_COMMIT
+          Windows full acceptance: SUCCESS
+          ZIP acceptance run: $env:VERIFIED_RUN — SUCCESS
+          ZIP SHA-256: $env:UPDATE_SHA256
+          ZIP size: $env:UPDATE_BYTES bytes
+
+          The update changes only the required application files, preserves user data and installer-managed files, supports rollback/reapply/idempotency, rejects a corrupted baseline before partial writes, and does not run a full installer EXE.
+
+          SRT Voice Studio 1.4.0 also enables Adaptive Timeline by default: SRT START timestamps stay fixed, available silence can be reused up to the next caption START with a small automatic safety guard, and final overlap must remain zero.
+
+          Install requirement: verified SRT Voice Studio 1.3.0. Version 1.3.1 is not required.
+          "@
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:VERIFIED_COMMIT --title $title --notes $notes
+          }
+          gh release upload $tag release_assets/* --repo $env:GITHUB_REPOSITORY --clobber
