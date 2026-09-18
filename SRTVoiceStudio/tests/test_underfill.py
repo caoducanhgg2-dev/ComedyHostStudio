@@ -20,7 +20,7 @@ def test_underfill_2_8_seconds_hard_floor_warning(context):
     slot=slots_for([Caption(1,0,4000,'test'),Caption(2,4100,8100,'next')])[0]
     b,r=fit_processed(a,rate,slot,Settings(),1,folder,cancel)
     assert r['speed']==.88 and 3.12<len(b)/RATE<3.23
-    assert .77<r['trailing_silence']<.89 and r['underfilled']
+    assert .84<r['trailing_silence']<.91 and r['underfilled']
     assert r['warning']=='SHORT SCRIPT / REMAINING SILENCE'
     assert r['end_sample']+4800<=round(4.1*RATE) and r['start_sample']==0 and r['overlaps']==0
 
