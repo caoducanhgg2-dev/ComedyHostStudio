@@ -1,0 +1,123 @@
+name: Publish SRT Voice Studio 1.6.2
+
+on:
+  push:
+    branches: ['publish/srt-voice-studio-1.6.2']
+    paths:
+      - '.github/workflows/publish-srt-voice-studio-1.6.2.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  VERIFIED_RUN: '35407765300'
+  VERIFIED_COMMIT: 3ae0c81ded18be30c0e762780a9598f5db3d3003
+  UPDATE_SHA256: F2F554A2605DD7E045A64F9EF1F906E7FE7743E69DC7239B0CF339ECB22D87D4
+  UPDATE_BYTES: '9361336'
+
+jobs:
+  publish:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Download exact verified 1.6.2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.6.1_to_1.6.2
+          path: verified
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          run-id: ${{ env.VERIFIED_RUN }}
+
+      - name: Verify package and prepare release assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem verified -Recurse -File -Filter 'SRTVoiceStudio_Update_1.6.1_to_1.6.2.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'Verified 1.6.2 ZIP not found.' }
+          $sha=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($sha -ne $env:UPDATE_SHA256) { throw "ZIP SHA mismatch: $sha" }
+          if ($zip.Length -ne [int64]$env:UPDATE_BYTES) { throw "ZIP size mismatch: $($zip.Length)" }
+
+          $installer=Get-ChildItem verified -Recurse -File | Where-Object { $_.Name -match '(?i)setup.*\.exe$|installer.*\.exe$' }
+          if ($installer) { throw 'ZIP-only release must not contain a full installer EXE.' }
+
+          New-Item -ItemType Directory -Force release_assets | Out-Null
+          Copy-Item -LiteralPath $zip.FullName release_assets/
+          foreach ($name in @('final-acceptance-1.6.2.json','update_manifest.json','test-results-1.6.2.xml')) {
+            $item=Get-ChildItem verified -Recurse -File -Filter $name | Select-Object -First 1
+            if ($item) { Copy-Item -LiteralPath $item.FullName release_assets/ }
+          }
+
+          @"
+          SRT Voice Studio 1.6.2 - Adaptive Timeline
+
+          Dành cho máy đang cài SRT Voice Studio 1.6.1.
+          Cập nhật trực tiếp: 1.6.1 -> 1.6.2.
+          Không cần cài lại EXE.
+
+          Cách cập nhật:
+          1. Đóng SRT Voice Studio.
+          2. Giải nén SRTVoiceStudio_Update_1.6.1_to_1.6.2.zip.
+          3. Chạy Apply_Update.cmd.
+          4. Chờ UPDATE SUCCESS: SRT Voice Studio 1.6.2.
+          5. Nếu cần quay lại 1.6.1, chạy Rollback_Update.cmd.
+
+          Adaptive Timeline 1.6.2:
+          - Không bắt buộc gap 0.10 giây.
+          - Giữ nguyên START của SRT.
+          - Tự tận dụng khoảng trống tới trước START câu kế tiếp.
+          - Safety guard tự co, tối đa 30 ms.
+          - Overlap bắt buộc = 0.
+          - Giữ nguyên Auto SFX, Continuous Voice và multi-file của 1.6.1.
+
+          Verified commit: $env:VERIFIED_COMMIT
+          Verified workflow run: $env:VERIFIED_RUN
+          ZIP SHA-256: $env:UPDATE_SHA256
+          ZIP bytes: $env:UPDATE_BYTES
+          "@ | Set-Content release_assets/HUONG_DAN_SRTVoiceStudio_1.6.2.txt -Encoding UTF8
+
+          Get-ChildItem release_assets -File | Sort-Object Name | ForEach-Object {
+            $h=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+            "$h *$($_.Name)"
+          } | Set-Content release_assets/SHA256SUMS_RELEASE.txt -Encoding ASCII
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='srt-voice-studio-v1.6.2'
+          $title='SRT Voice Studio 1.6.2 - Adaptive Timeline'
+          $notes=@"
+          Verified ZIP-only update from SRT Voice Studio 1.6.1 to 1.6.2.
+
+          Verified source commit: $env:VERIFIED_COMMIT
+          Acceptance workflow: $env:VERIFIED_RUN — SUCCESS
+          ZIP SHA-256: $env:UPDATE_SHA256
+          ZIP size: $env:UPDATE_BYTES bytes
+
+          Acceptance passed:
+          - 110/110 Adaptive Timeline regression tests
+          - frozen app
+          - frozen SFX
+          - exact installed 1.6.1 reconstruction
+          - exact final tree
+          - rollback
+          - corruption guard
+          - reapply
+          - idempotency
+
+          1.6.2 keeps Auto SFX, Continuous Voice and multi-file features from 1.6.1, while making Adaptive Timeline the default. START timestamps remain fixed and final overlap must be zero.
+          "@
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:VERIFIED_COMMIT --title $title --notes $notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $tag release_assets/* --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
