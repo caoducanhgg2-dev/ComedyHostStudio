@@ -72,18 +72,34 @@ def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,m
         p=w.voice_panel
         # Default "Đã cài" remains 33 local Kokoro voices before Aivis install.
         assert p.list.count()==33
-        p.filter.setCurrentIndex(p.filter.findData('en'))
-        assert p.list.count()==28
-        assert any(p.list.item(i).data(256)=='bf_emma' for i in range(p.list.count()))
+        p.filter.setCurrentIndex(p.filter.findData('us'))
+        # US: 20 installed Kokoro + 12 CapCut reference profiles.
+        assert p.list.count()==32
+        assert any(p.list.item(i).data(256)=='af_heart' for i in range(p.list.count()))
         assert any('thân thiện' in p.list.item(i).text() for i in range(p.list.count()))
+        assert any(p.list.item(i).data(256)=='capcut:us:jessie' for i in range(p.list.count()))
+        assert '20 đã cài' in p.status.text() and '12 CapCut tham khảo' in p.status.text()
+
+        p.filter.setCurrentIndex(p.filter.findData('uk'))
+        # UK: 8 installed Kokoro + 6 CapCut reference profiles.
+        assert p.list.count()==14
+        assert any(p.list.item(i).data(256)=='bf_emma' for i in range(p.list.count()))
+        assert any(p.list.item(i).data(256)=='capcut:uk:witty' for i in range(p.list.count()))
+        assert '8 đã cài' in p.status.text() and '6 CapCut tham khảo' in p.status.text()
+
         p.filter.setCurrentIndex(p.filter.findData('ja'))
-        # 1.7.1 exposes 5 installed Kokoro + 11 optional Aivis voices.
-        assert p.list.count()==16
-        assert '16 giọng Nhật' in p.status.text() and '5 đã cài' in p.status.text() and '11 chờ tải' in p.status.text()
+        # Japan: 5 installed Kokoro + 11 optional Aivis + 6 CapCut reference profiles.
+        assert p.list.count()==22
+        assert '22 giọng Nhật' in p.status.text() and '5 đã cài' in p.status.text()
+        assert '11 chờ model' in p.status.text() and '6 CapCut tham khảo' in p.status.text()
         assert any('Sáng, trẻ trung' in p.list.item(i).text() for i in range(p.list.count()))
         assert any('Trầm vừa' in p.list.item(i).text() for i in range(p.list.count()))
         assert any('Rinne El' in p.list.item(i).text() and 'Chưa cài' in p.list.item(i).text() for i in range(p.list.count()))
         assert any('Aida Shigeru' in p.list.item(i).text() and 'Chưa cài' in p.list.item(i).text() for i in range(p.list.count()))
+        capcut_index=next(i for i in range(p.list.count()) if p.list.item(i).data(256)=='capcut:jp:anime_girl')
+        p.list.setCurrentRow(capcut_index)
+        assert not p.use.isEnabled()
+        assert 'CapCut tham khảo' in p.details.toPlainText()
         # Pick an installed Kokoro voice to verify favorite/use behavior remains intact.
         installed_index=next(i for i in range(p.list.count()) if p.list.item(i).data(256)=='jf_alpha')
         p.list.setCurrentRow(installed_index)
