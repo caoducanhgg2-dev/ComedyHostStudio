@@ -84,6 +84,8 @@ class VoicePanel(QWidget):
             if not is_installed:
                 item=w.voice.model().item(index)
                 if item is not None:item.setEnabled(False)
+        if not installed_list:
+            w.voice.setCurrentIndex(-1)
         w.voice.blockSignals(old)
         missing=max(0,len(choices)-len(installed_list))
         if missing:
