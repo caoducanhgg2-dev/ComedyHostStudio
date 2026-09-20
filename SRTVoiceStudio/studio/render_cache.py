@@ -92,6 +92,40 @@ class TtsCache:
         path.unlink(missing_ok=True)
         return existed
 
+    def stats(self):
+        try:
+            files = [p for p in self.root.rglob("*.npz") if p.is_file()]
+            return {
+                "items": len(files),
+                "bytes": sum(p.stat().st_size for p in files),
+            }
+        except OSError:
+            return {"items": 0, "bytes": 0}
+
+    def clear(self):
+        removed = 0
+        freed = 0
+        try:
+            files = [p for p in self.root.rglob("*.npz") if p.is_file()]
+            for path in files:
+                try:
+                    size = path.stat().st_size
+                    path.unlink()
+                    removed += 1
+                    freed += size
+                except OSError:
+                    continue
+            for folder in sorted(
+                    (p for p in self.root.rglob("*") if p.is_dir()),
+                    key=lambda p: len(p.parts), reverse=True):
+                try:
+                    folder.rmdir()
+                except OSError:
+                    pass
+        finally:
+            self.root.mkdir(parents=True, exist_ok=True)
+        return {"items": removed, "bytes": freed}
+
     def cleanup(self):
         try:
             files = [p for p in self.root.rglob("*.npz") if p.is_file()]
