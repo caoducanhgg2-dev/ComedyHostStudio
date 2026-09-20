@@ -106,6 +106,24 @@ def _install_17_settings(window):
 def _install_workspace_controls(window):
     panel = window.multi_file_panel
     panel.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+    panel.table.setColumnCount(7)
+    panel.table.setHorizontalHeaderLabels(
+        ["Tệp SRT", "Số câu", "Thời lượng", "Tiến độ", "Trạng thái", "MP3 / Lỗi", "QC"])
+    original_unified_refresh = panel.refresh
+
+    def refresh_17_workspace(self):
+        original_unified_refresh()
+        # The 1.6.1 refresh updates the first six columns. Column 7 is a compact
+        # production-QC indicator; details stay in the QC 1.7 tab.
+        for row_index, item in enumerate(self.queue.items):
+            report = item.report if isinstance(item.report, dict) else {}
+            quality = report.get("quality") if isinstance(report.get("quality"), dict) else {}
+            status = str(quality.get("status") or "—")
+            self.table.setItem(row_index, 6, QTableWidgetItem(status))
+
+    from PySide6.QtWidgets import QTableWidgetItem
+    panel.refresh = MethodType(refresh_17_workspace, panel)
+    panel.refresh()
 
     row = QHBoxLayout()
     panel.select_all_button = QPushButton("Chọn tất cả")
