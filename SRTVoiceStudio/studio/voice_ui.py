@@ -22,7 +22,7 @@ class VoicePanel(QWidget):
         saved=preferences.read().get('favorite_voices',[])
         self.favorites=set(x for x in saved if isinstance(x,str)) if isinstance(saved,list) else set()
         layout=QVBoxLayout(self)
-        layout.addWidget(QLabel('THƯ VIỆN GIỌNG • Giọng Aivis chưa tải vẫn hiện trong dropdown Tiếng Nhật và trong thư viện'))
+        layout.addWidget(QLabel('THƯ VIỆN GIỌNG 1.7.1 • Nhật Aivis + Việt Korva • model tùy chọn tải riêng'))
         self.filter=QComboBox()
         for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Tiếng Anh','en'),('Tiếng Nhật','ja'),('Tiếng Việt','vi'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
         self.filter.setCurrentIndex(1);layout.addWidget(self.filter)
@@ -36,9 +36,17 @@ class VoicePanel(QWidget):
         from .aivis_pack import LICENSE_NOTICE,LICENSE_URL
         notice=QLabel(LICENSE_NOTICE);notice.setWordWrap(True);layout.addWidget(notice)
         link=QLabel(f'<a style="color:#66b7ff" href="{LICENSE_URL}">Đọc giấy phép ACML đầy đủ</a>');link.setOpenExternalLinks(True);layout.addWidget(link)
-        self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận các điều kiện sử dụng gói Aivis');layout.addWidget(self.accept_license)
+        self.accept_license=QCheckBox('Tôi đã đọc và chấp nhận điều kiện của gói Aivis Nhật');layout.addWidget(self.accept_license)
         self.install=QPushButton('Tải / cập nhật gói Aivis Nhật');layout.addWidget(self.install)
         self.accept_license.toggled.connect(self.refresh_install);self.install.clicked.connect(self.install_pack)
+
+        from .korva_pack import LICENSE_NOTICE as KORVA_NOTICE, LICENSE_URL as KORVA_LICENSE_URL
+        korva_notice=QLabel(KORVA_NOTICE);korva_notice.setWordWrap(True);layout.addWidget(korva_notice)
+        korva_link=QLabel(f'<a style="color:#66b7ff" href="{KORVA_LICENSE_URL}">Đọc giấy phép KorvaTTS / Apache-2.0</a>')
+        korva_link.setOpenExternalLinks(True);layout.addWidget(korva_link)
+        self.accept_korva=QCheckBox('Tôi đã đọc thông tin giấy phép của gói giọng Việt Korva');layout.addWidget(self.accept_korva)
+        self.install_korva=QPushButton('Tải / cập nhật gói Korva Việt');layout.addWidget(self.install_korva)
+        self.accept_korva.toggled.connect(self.refresh_install);self.install_korva.clicked.connect(self.install_korva_pack)
         self.filter.currentIndexChanged.connect(self.refresh)
         self.list.currentItemChanged.connect(self.selection)
         self.use.clicked.connect(self.select_voice);self.favorite.clicked.connect(self.toggle_favorite)
@@ -88,15 +96,26 @@ class VoicePanel(QWidget):
 
     def refresh_install(self):
         installed=self.window.aivis_pack.available();complete=self.window.aivis_pack.complete()
-        if complete:text='Aivis Nhật đã đầy đủ • 6/6 giọng • dùng offline'
-        elif installed:text='Cập nhật Aivis Nhật • bổ sung đủ 6 giọng'
-        else:text='Tải Aivis Nhật • 6 giọng • sau khi tải dùng offline'
+        if complete:text='Aivis Nhật đã đầy đủ • 11/11 giọng tùy chọn • offline'
+        elif installed:text='Cập nhật Aivis Nhật • bổ sung từ 6 lên 11 giọng'
+        else:text='Tải Aivis Nhật • 11 giọng tùy chọn • offline sau khi tải'
         self.install.setText(text)
         self.install.setEnabled(not complete and not self.window.busy() and self.accept_license.isChecked())
+
+        korva_complete=self.window.korva_pack.complete()
+        self.install_korva.setText(
+            'Korva Việt đã đầy đủ • 10/10 giọng • offline'
+            if korva_complete else 'Tải Korva Việt • 10 giọng • khoảng 400 MB')
+        self.install_korva.setEnabled(
+            not korva_complete and not self.window.busy() and self.accept_korva.isChecked())
 
     def install_pack(self):
         if self.window.busy() or not self.accept_license.isChecked():return
         self.window.start('install_aivis',dict(pack=self.window.aivis_pack))
+
+    def install_korva_pack(self):
+        if self.window.busy() or not self.accept_korva.isChecked():return
+        self.window.start('install_korva',dict(pack=self.window.korva_pack))
 
     def selected(self):
         item=self.list.currentItem();return self.voices.get(item.data(Qt.UserRole)) if item else None
