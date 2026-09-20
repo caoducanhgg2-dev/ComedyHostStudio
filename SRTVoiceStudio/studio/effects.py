@@ -145,21 +145,26 @@ class EffectProcessor:
                 if not len(result):
                     return None
                 if not np.isfinite(result).all():
-                    raise RuntimeError('Effect trả về mẫu không hữu hạn.')
+                    # Treat a successful FFmpeg process with invalid PCM exactly
+                    # like a transient empty target: discard it and retry once
+                    # using completely fresh files. Invalid samples are never
+                    # returned to the renderer.
+                    return None
                 return result
             finally:
                 source.unlink(missing_ok=True)
                 target.unlink(missing_ok=True)
 
-        # A successful FFmpeg process that yields a zero-byte target is treated
-        # as transient IO and retried once with completely fresh paths. Command
-        # failures and non-finite samples still fail immediately.
+        # A successful FFmpeg process that yields an empty/non-finite target is
+        # treated as transient DSP/IO and retried once with completely fresh
+        # paths. A second invalid result fails closed.
         result = attempt()
         if result is None:
             check_cancel(self.cancel)
             result = attempt()
         if result is None:
-            raise RuntimeError('Effect trả về audio rỗng sau 2 lần xử lý độc lập.')
+            raise RuntimeError(
+                'Effect trả về audio rỗng hoặc không hữu hạn sau 2 lần xử lý độc lập.')
         # Pitch-only transformations preserve duration. Echo tails are never removed here.
         if duration_samples is not None:
             result = np.pad(result, (0, max(0, duration_samples-len(result))))[:duration_samples]
