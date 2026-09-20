@@ -156,6 +156,8 @@ def _install_quality_reporting(window):
                 format_quality(quality) + "\n" + cache + "\n" + smart)
             window.status.setText(
                 window.status.text() + f" · QC {quality.get('status', 'WARN')}")
+            if hasattr(window, "quality_panel"):
+                window.quality_panel.refresh()
         elif task == "batch":
             items = list(window.multi_file_panel.queue.items)
             done = [i for i in items if i.state == DONE and i.report]
@@ -168,6 +170,8 @@ def _install_quality_reporting(window):
                         f"cache {item.report.get('cache_hits', 0)}/"
                         f"{item.report.get('cache_hits', 0) + item.report.get('cache_misses', 0)} hit")
                 window.report.setPlainText(window.report.toPlainText().rstrip() + "\n" + "\n".join(lines))
+            if hasattr(window, "quality_panel"):
+                window.quality_panel.refresh()
 
     window.success = success_17
 
@@ -179,10 +183,16 @@ def enhance_window_v17(window):
     from .sfx_editor_ui import SfxEditorPanel
     window.sfx_editor_panel = SfxEditorPanel(window)
     window.tabs.addTab(window.sfx_editor_panel, "SFX Editor 1.7")
-    def refresh_sfx_editor(index):
-        if window.tabs.widget(index) is window.sfx_editor_panel:
+    from .quality_ui import QualityPanel
+    window.quality_panel = QualityPanel(window)
+    window.tabs.addTab(window.quality_panel, "QC 1.7")
+    def refresh_17_tabs(index):
+        widget = window.tabs.widget(index)
+        if widget is window.sfx_editor_panel:
             window.sfx_editor_panel.refresh()
-    window.tabs.currentChanged.connect(refresh_sfx_editor)
+        elif widget is window.quality_panel:
+            window.quality_panel.refresh()
+    window.tabs.currentChanged.connect(refresh_17_tabs)
     window.multi_file_panel.table.itemSelectionChanged.connect(
         lambda: window.sfx_editor_panel.refresh()
         if window.tabs.currentWidget() is window.sfx_editor_panel else None)
