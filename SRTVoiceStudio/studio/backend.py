@@ -16,7 +16,8 @@ EN_VOICES = EN_US_VOICES
 JA_VOICES = ['jf_alpha', 'jf_gongitsune', 'jf_nezumi', 'jf_tebukuro', 'jm_kumo']
 PREVIEW = {'English US': 'This is a preview of the selected American voice.',
            'English UK': 'This is a preview of the selected British voice.',
-           'Japanese': 'これは選択した音声のプレビューです。'}
+           'Japanese': 'これは選択した音声のプレビューです。',
+           'Vietnamese': 'Xin chào, đây là bản nghe thử của giọng tiếng Việt đã chọn.'}
 
 class Backend:
     def __init__(self):
