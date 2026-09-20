@@ -83,7 +83,8 @@ class UiChecks:
                 details=w.preview_cache.details
                 assert details['underfilled_at_hard_minimum'] is True
                 assert abs(details['speed']-details['minimum_effective_speed']) < 1e-9
-                assert 'CÂU THOẠI NGẮN / CÒN KHOẢNG LẶNG' in w.preview_details.text()
+                assert 'SHORT SCRIPT' in details['warning']
+                assert 'CÂU THOẠI NGẮN' in w.preview_details.text()
                 assert w.voice.currentData()=='af_heart' and 'Heart' in w.voice.currentText()
                 assert w.generate.text()=='▶  TẠO MP3'
                 w.grab().save(str(data_dir()/'ui-preview.png'))
