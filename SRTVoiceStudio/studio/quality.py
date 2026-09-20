@@ -39,6 +39,7 @@ def analyze_render(summary: dict) -> dict:
     """Return PASS/WARN/FAIL and machine-readable issues from a render summary."""
     issues = []
     severe = []
+    records = list(summary.get("records") or [])
 
     overlaps = int(summary.get("overlaps", 0) or 0)
     if overlaps:
@@ -79,24 +80,33 @@ def analyze_render(summary: dict) -> dict:
 
     trimmed = int(summary.get("safely_trimmed", 0) or 0)
     if trimmed:
-        issues.append(dict(code="TRIMMED_CAPTIONS", count=trimmed,
+        captions = [int(r.get("caption")) for r in records
+                    if r.get("trimmed") and r.get("caption") is not None]
+        issues.append(dict(code="TRIMMED_CAPTIONS", count=trimmed, captions=captions,
                            message=f"{trimmed} caption đã phải cắt an toàn."))
 
     short = int(summary.get("underfilled_after_hard_minimum", 0) or 0)
     if short:
-        issues.append(dict(code="SHORT_SCRIPT", count=short,
+        captions = [int(r.get("caption")) for r in records
+                    if r.get("underfilled_at_hard_minimum") and r.get("caption") is not None]
+        issues.append(dict(code="SHORT_SCRIPT", count=short, captions=captions,
                            message=f"{short} caption vẫn thiếu voice ở tốc độ tối thiểu."))
 
     long_gaps = int(summary.get("transitions_over_08", 0) or 0)
     if long_gaps:
-        issues.append(dict(code="LONG_TRANSITIONS", count=long_gaps,
+        captions = [int(r.get("caption")) for r in records[:-1]
+                    if float(r.get("transition_silence", 0.0) or 0.0) > .8
+                    and r.get("caption") is not None]
+        issues.append(dict(code="LONG_TRANSITIONS", count=long_gaps, captions=captions,
                            message=f"{long_gaps} chuyển câu có khoảng lặng > 0.8 giây."))
 
     rejected = int(summary.get("sfx_rejected", 0) or 0)
     planned = int(summary.get("sfx_planned", 0) or 0)
     mixed = int(summary.get("sfx_mixed", 0) or 0)
     if rejected:
-        issues.append(dict(code="SFX_REJECTED", count=rejected,
+        captions = [int(e.get("caption")) for e in list(summary.get("sfx_events") or [])
+                    if not e.get("mixed") and e.get("caption") is not None]
+        issues.append(dict(code="SFX_REJECTED", count=rejected, captions=captions,
                            message=f"{rejected} SFX bị QA loại."))
     if bool(summary.get("auto_sfx")) and planned and mixed == 0:
         issues.append(dict(code="SFX_INAUDIBLE_OR_REJECTED", count=planned,
