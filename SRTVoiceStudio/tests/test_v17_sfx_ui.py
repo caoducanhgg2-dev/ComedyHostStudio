@@ -27,6 +27,9 @@ def test_sfx_editor_is_per_file_and_disabled_cue_stays_reversible(app, tmp_path,
         second = tmp_path / "second.srt"
         first.write_text("1\n00:00:00,000 --> 00:00:03,000\nついに完成しました。\n", encoding="utf-8")
         second.write_text("1\n00:00:00,000 --> 00:00:03,000\n次はここです。\n", encoding="utf-8")
+        japanese = w.language.findData("Japanese")
+        assert japanese >= 0
+        w.language.setCurrentIndex(japanese)
         w.multi_file_panel.add_paths([first, second])
 
         w.multi_file_panel.table.selectRow(0)
