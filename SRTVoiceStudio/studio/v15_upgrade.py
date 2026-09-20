@@ -22,7 +22,7 @@ from .audio import wav_bytes, Cancelled
 from .backend import PREVIEW
 from .render import Settings
 from .voice_backends import synthesize_selected
-from .timeline import read_srt, slots_for, RATE
+from .timeline import read_srt, slots_for, RATE, AUTO_GAP_MS
 from .v15_core import (BUILTIN_PRESETS, all_presets, load_custom_presets, save_custom_presets,
     settings_from_mapping, estimate_caption, load_batch_queue, save_batch_queue)
 
@@ -157,7 +157,7 @@ class TimelineInspectorPanel(QWidget):
 
     def apply_safe(self):
         self.window.adaptive.setChecked(True)
-        idx=self.window.gap.findData(100)
+        idx=self.window.gap.findData(AUTO_GAP_MS)
         if idx>=0:self.window.gap.setCurrentIndex(idx)
         idx=self.window.overflow.findData('Safe Trim')
         if idx>=0:self.window.overflow.setCurrentIndex(idx)
@@ -165,7 +165,7 @@ class TimelineInspectorPanel(QWidget):
         if hasattr(self.window,'continuous_target'):
             idx=self.window.continuous_target.findData(100)
             if idx>=0:self.window.continuous_target.setCurrentIndex(idx)
-        self.window.status.setText('Đã áp dụng Smart Fit 2.0: adaptive + gap 0.10s + Continuous Voice.')
+        self.window.status.setText('Đã áp dụng Smart Fit 2.0: Adaptive Timeline + Continuous Voice.')
         self.refresh()
 
     def open_first_risk(self):
@@ -205,9 +205,11 @@ class PresetPanel(QWidget):
 
     def show_details(self,*_):
         name=self.preset.currentData();value=self.data.get(name,{})
+        gap=value.get('gap_ms',AUTO_GAP_MS)
+        gap_label='Tự động' if gap == AUTO_GAP_MS else f'{gap/1000:.2f}s'
         lines=[f'Tên: {name}',f'Loại: {"Có sẵn" if name in BUILTIN_PRESETS else "Tự tạo"}',
             f"Ngôn ngữ: {value.get('language','—')}",f"Giọng: {value.get('voice','—')}",
-            f"Speed: {value.get('speed',1):.2f}× · Gap: {value.get('gap_ms',100)/1000:.2f}s",
+            f"Speed: {value.get('speed',1):.2f}× · Gap: {gap_label}",
             f"Cảm xúc: {value.get('emotion','Natural')} · FX: {value.get('effect','None')}",
             f"Continuous Voice: {'Bật' if value.get('continuous') else 'Tắt'} · Target: {value.get('continuous_target_ms',100)} ms"]
         self.details.setPlainText('\n'.join(lines));self.delete.setEnabled(bool(name) and name not in BUILTIN_PRESETS)
