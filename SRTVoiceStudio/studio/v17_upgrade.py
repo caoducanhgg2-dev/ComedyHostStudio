@@ -175,6 +175,16 @@ def enhance_window_v17(window):
     window = enhance_window_v161(window)
     _install_17_settings(window)
     _install_workspace_controls(window)
+    from .sfx_editor_ui import SfxEditorPanel
+    window.sfx_editor_panel = SfxEditorPanel(window)
+    window.tabs.addTab(window.sfx_editor_panel, "SFX Editor 1.7")
+    def refresh_sfx_editor(index):
+        if window.tabs.widget(index) is window.sfx_editor_panel:
+            window.sfx_editor_panel.refresh()
+    window.tabs.currentChanged.connect(refresh_sfx_editor)
+    window.multi_file_panel.table.itemSelectionChanged.connect(
+        lambda: window.sfx_editor_panel.refresh()
+        if window.tabs.currentWidget() is window.sfx_editor_panel else None)
     _install_quality_reporting(window)
     window.status.setText(
         "Sẵn sàng · 1.7.0: Unified Workspace + Render Cache + Smart Fit 3.0 + Auto QC")
