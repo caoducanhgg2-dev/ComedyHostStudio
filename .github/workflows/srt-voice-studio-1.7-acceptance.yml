@@ -1,6 +1,10 @@
 name: Accept SRT Voice Studio 1.7.0
 on:
   workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.7.0-production-workspace']
+    paths:
+      - '.github/workflows/srt-voice-studio-1.7-acceptance.yml'
 permissions:
   contents: read
   actions: read
