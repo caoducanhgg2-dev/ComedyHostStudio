@@ -104,3 +104,28 @@ class TtsCache:
         except OSError:
             # Cache maintenance must never fail a render.
             return
+
+
+def regenerate_caption_cache(backend, text: str, settings, cancel, progress=lambda *_: None):
+    """Regenerate exactly one raw-TTS cache entry in the background."""
+    from .voice_backends import synthesize_selected
+    cache = TtsCache()
+    cache.invalidate(settings, text)
+    progress(0, 1, "Đang tạo lại TTS cho caption đã chọn…")
+    samples, rate = synthesize_selected(
+        backend, text, settings, cancel,
+        lambda msg: progress(0, 1, msg))
+    samples = np.asarray(samples, dtype=np.float32).reshape(-1)
+    if (not len(samples) or not np.isfinite(samples).all()
+            or not np.any(np.abs(samples) > 1e-7)):
+        raise RuntimeError("TTS caption trả về audio rỗng hoặc không hợp lệ.")
+    if not cache.put(settings, text, samples, int(rate)):
+        raise RuntimeError("Không thể lưu TTS caption vào Render Cache.")
+    progress(1, 1, "Đã tạo lại TTS caption và lưu Render Cache.")
+    return {
+        "caption": int(getattr(settings, "_caption_index", 0) or 0),
+        "text": str(text),
+        "samples": int(len(samples)),
+        "rate": int(rate),
+        "cache_key": cache_key(settings, text),
+    }
