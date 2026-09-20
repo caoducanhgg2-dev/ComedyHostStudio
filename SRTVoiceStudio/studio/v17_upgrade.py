@@ -98,7 +98,7 @@ def _install_17_settings(window):
             base_apply_safe()
             window.smart_fit3.setChecked(True)
             window.status.setText(
-                "Đã áp dụng Smart Fit 3.0: adaptive + gap 0.10s + Continuous Voice "
+                "Đã áp dụng Smart Fit 3.0: Adaptive Timeline + Continuous Voice "
                 "+ làm mượt tốc độ giữa caption.")
         inspector.optimize.clicked.connect(apply_fit3)
 
