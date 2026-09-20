@@ -91,6 +91,8 @@ def display(value):
 
 def message(text):
     if text == 'SHORT SCRIPT / REMAINING SILENCE':return 'CÂU THOẠI NGẮN / CÒN KHOẢNG LẶNG'
+    if text == 'CONTINUOUS TARGET UNREACHABLE / SHORT SCRIPT':
+        return 'CÂU THOẠI NGẮN / KHÔNG THỂ ĐẠT KHOẢNG CHUYỂN MỤC TIÊU'
     replacements={
      'SHORT SCRIPT / UNDERFILLED SLOT':'LỜI THOẠI NGẮN / CHƯA LẤP ĐẦY KHUNG',
      'TIMELINE VALID':'MỐC THỜI GIAN HỢP LỆ','Creating voice':'Đang tạo giọng',
