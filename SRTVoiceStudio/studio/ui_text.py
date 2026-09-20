@@ -1,5 +1,5 @@
 """Vietnamese display labels; stable backend IDs are stored as combo itemData."""
-LANGUAGES={'English US':'Tiếng Anh (Mỹ)','English UK':'Tiếng Anh (Anh)','Japanese':'Tiếng Nhật'}
+LANGUAGES={'English US':'Tiếng Anh (Mỹ)','English UK':'Tiếng Anh (Anh)','Japanese':'Tiếng Nhật','Vietnamese':'Tiếng Việt'}
 MODES={'Manual':'Thủ công','Auto':'Tự động'}
 INTENSITIES={'Mild':'Nhẹ','Medium':'Vừa','Strong':'Mạnh'}
 EMOTIONS={'Natural':'Tự nhiên','Happy':'Vui vẻ','Excited':'Hào hứng','Funny / Playful':'Dí dỏm / Vui nhộn',
@@ -54,13 +54,30 @@ VOICE_CHARACTERISTICS={
     'jf_tebukuro':'Ấm, điềm tĩnh, tự nhiên',
     'jm_kumo':'Trầm vừa, bình tĩnh, hợp thuyết minh',
 
-    # Aivis Japanese — 6 optional local voices
+    # Aivis Japanese — optional local voices
     'aivis:e756b8e4-b606-4e15-99b1-3f9c6a1b2317':'Tự nhiên, mềm, hội thoại đời thường',
     'aivis:5680ac39-43c9-487a-bc3e-018c0d29cc38':'Nhẹ, ngọt, thư giãn',
     'aivis:d2c99ca6-73e5-486c-994e-ee0ce2d74928':'Trẻ, sáng, giàu cảm xúc',
     'aivis:561e4e59-3bc9-4726-9028-44a3c12a6f1d':'Baritone, trung niên, hợp kể chuyện',
     'aivis:41b7785f-35cc-4089-a360-dd8a63da5e75':'Trẻ, mềm, biểu cảm',
     'aivis:bf56410a-d8e6-430d-a477-f789e16206d3':'Trẻ, tự nhiên, hội thoại',
+    'aivis:c99b650e-4d24-4528-a7a3-6d0f9692f839':'Nam trẻ, thấp, điềm tĩnh, hội thoại',
+    'aivis:161ab385-07a5-4dd6-a045-5b0f21dfd9ec':'Nữ trẻ, tự nhiên, nhiều sắc thái',
+    'aivis:ef92118d-eda3-49d9-858d-1e9ae4dae714':'Nữ trẻ, sáng, biểu cảm',
+    'aivis:4a43610f-8ace-4fe2-9541-eb26255f1927':'Nữ trẻ, tự nhiên, hội thoại',
+    'aivis:47ddff3b-10b4-48e8-8d5d-692461fa7f96':'Nữ trẻ, mềm, nhiều sắc thái',
+
+    # KorvaTTS Vietnamese — 10 optional offline voices
+    'korva:bao_kim':'Nữ · rõ, hiện đại, hợp podcast / reviewer',
+    'korva:khanh_vy':'Nữ · trẻ, sáng, hợp short-form / hội thoại',
+    'korva:ngoc_huyen':'Nữ · mềm, tự nhiên, hợp kể chuyện',
+    'korva:phuong_linh':'Nữ · rõ, cân bằng, hợp thuyết minh',
+    'korva:quynh_nhu':'Nữ · nhẹ, thân thiện, hợp nội dung đời thường',
+    'korva:gia_bao':'Nam · rõ, trẻ, hợp reviewer',
+    'korva:hoang_nam':'Nam · chắc, tự nhiên, hợp thuyết minh',
+    'korva:huu_dat':'Nam · trầm vừa, hợp kể chuyện',
+    'korva:quang_huy':'Nam · sáng, hiện đại, hợp short-form',
+    'korva:thanh_phong':'Nam · điềm tĩnh, rõ, hợp documentary',
 }
 
 def voice_characteristic(voice):
