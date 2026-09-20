@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 import numpy as np
 import pytest
-from studio.timeline import parse, slots_for, validate, TimelineError
+from studio.timeline import parse, slots_for, validate, TimelineError, AUTO_GAP_MS, Caption
 from studio.render import render, Settings
 from studio.audio import Cancelled, run
 from studio.paths import executable
