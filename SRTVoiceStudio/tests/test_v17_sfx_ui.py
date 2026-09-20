@@ -51,7 +51,18 @@ def test_sfx_editor_is_per_file_and_disabled_cue_stays_reversible(app, tmp_path,
         assert w.sfx_editor_panel.table.rowCount() >= 1
         assert "Tắt thủ công" in w.sfx_editor_panel.table.item(0, 3).text()
 
+        # Re-enable with a non-zero edit and verify the controls restore it.
+        w.sfx_editor_panel.enabled.setChecked(True)
+        w.sfx_editor_panel.offset.setValue(500)
+        level_index = w.sfx_editor_panel.level.findData(1.3)
+        assert level_index >= 0
+        w.sfx_editor_panel.level.setCurrentIndex(level_index)
+        w.sfx_editor_panel.apply_selected()
         w.sfx_editor_panel.table.selectRow(0)
+        w.sfx_editor_panel.load_selected()
+        assert w.sfx_editor_panel.offset.value() == 500
+        assert w.sfx_editor_panel.level.currentData() == 1.3
+
         w.sfx_editor_panel.reset_selected()
         assert first_item.sfx_overrides == ()
     finally:
