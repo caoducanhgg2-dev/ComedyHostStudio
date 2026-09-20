@@ -205,7 +205,7 @@ jobs:
       - name: Download exact accepted 1.7.0 update
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Update_1.7.0_to_1.7.1
+          name: SRTVoiceStudio_Update_1.6.2_to_1.7.0
           run-id: 35495675924
           github-token: ${{ github.token }}
           path: baseline-170-update
