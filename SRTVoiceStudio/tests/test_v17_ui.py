@@ -3,7 +3,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from pathlib import Path
 import pytest
-from PySide6.QtWidgets import QApplication
+import numpy as np
+from PySide6.QtWidgets import QApplication, QAbstractItemView
 
 
 @pytest.fixture(scope="module")
@@ -28,7 +29,7 @@ def test_17_workspace_exposes_shared_smartfit_cache_and_multiselect(app, tmp_pat
         settings = w.settings()
         assert settings.smart_fit3 is True
         assert settings.use_render_cache is True
-        assert w.multi_file_panel.table.selectionMode() != w.multi_file_panel.table.SingleSelection
+        assert w.multi_file_panel.table.selectionMode() == QAbstractItemView.ExtendedSelection
         assert w.multi_file_panel.select_all_button.text() == "Chọn tất cả"
         assert "TTS" in w.multi_file_panel.retry_caption_button.text()
     finally:
