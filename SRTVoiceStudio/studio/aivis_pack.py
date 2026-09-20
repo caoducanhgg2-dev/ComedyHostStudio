@@ -15,11 +15,11 @@ BERT_SOURCE='https://huggingface.co/tsukumijima/deberta-v2-large-japanese-char-w
 BERT_REVISION='d701ec67708287b20d2063270f6b535e6eed09ab'
 LICENSE_URL='https://github.com/Aivis-Project/ACML/blob/master/ACML-1.0.md'
 HUB='https://hub.aivis-project.com/aivm-models/'
-LICENSE_NOTICE=('Gói Aivis Nhật gồm Mao, Kohaku và 4 giọng mở rộng. Các mô tả chất giọng chỉ để chọn nhanh, '
-    'không phải điểm chất lượng nghe. Tất cả 6 model trong gói này dùng ACML 1.0; thương mại có điều kiện, '
-    'có các giới hạn về mạo danh, lừa dối, công kích/phê phán cá nhân, tổ chức hoặc sản phẩm có thật. '
-    'Đọc điều khoản đầy đủ trước khi dùng cho nội dung review/comedy. Engine LGPL-3.0; BERT CC-BY-SA-4.0. '
-    'Lần cài mới tải khoảng 2,4 GB; máy đã có gói Mao/Kohaku chỉ tải thêm các model còn thiếu.')
+LICENSE_NOTICE=('Gói Aivis Nhật 1.7.1 gồm 11 giọng tùy chọn. 10 model dùng ACML 1.0; Sukiyaki Umataro dùng CC0. '
+    'Mô tả chất giọng chỉ để chọn nhanh, không phải điểm chất lượng nghe. '
+    'Với ACML 1.0, hãy đọc điều khoản đầy đủ trước khi dùng cho nội dung review/comedy; '
+    'các giới hạn về mạo danh, lừa dối và công kích/phê phán cá nhân, tổ chức hoặc sản phẩm có thật vẫn áp dụng. '
+    'Engine LGPL-3.0; BERT CC-BY-SA-4.0. Model được tải riêng và kiểm tra SHA-256 trước khi kích hoạt.')
 
 # Pinned AIVMX assets. Size and SHA-256 come from the AivisHub AIVMX metadata.
 MODEL_PACKS=(
@@ -29,6 +29,11 @@ MODEL_PACKS=(
     ('47e53151-a378-46f3-abee-ce13aa07feb1','1.0.0',251137086,'6dabe29de5ec2c1715e12a430805e1bff6ec64a315cccec2d26fad029df83243'),
     ('e9339137-2ae3-4d41-9394-fb757a7e61e6','1.0.0',250837473,'eca53a500a70746f649572ec186d3b98665606b13e8e8e648f9b10fa8c0000c4'),
     ('6d11c6c2-f4a4-4435-887e-23dd60f8b8dd','1.0.0',250240153,'6ff7eaa61c24d37434e2c6ab672fc3ba189ecc9118c08918a486ed5316e5c9d3'),
+    ('f493ab6c-1ffa-4534-9bbd-2ba398f17cd5','1.0.0',250036347,'4e90b846f50d4a414993a3b1b90bcf16f2a2ced9cbba9036853191a6196d3ddc'),
+    ('21d8d535-f206-462d-a3bb-05f8252dede7','1.0.0',251278485,'d2708663b114c03c4b124d606660f155411413822a3768c5cbb257d70d850699'),
+    ('f83c385c-829b-40c4-8c11-639027e61636','1.0.0',251173709,'859078ca2e287b7084aceec4190a54887d2ddba416bab0523d54d7aa20cfc0c6'),
+    ('b1b8072f-809f-4c6d-9ba1-2ca94d9c3663','1.0.0',251261356,'2dc764e49667406d97c541475015176052fc618254e35d51c0ce5a5ed69f4b8e'),
+    ('9a7feb22-b6f3-4f79-92d9-26849e063fa1','1.0.0',251224802,'0798eb70b4fa04bf5e1a92adb8bf17253f3b8094bff3356f7fbaf67daff9fe00'),
 )
 
 EXTRA_VOICES=(
@@ -40,6 +45,16 @@ EXTRA_VOICES=(
          name='Mai — Nữ · Trẻ, mềm, biểu cảm',styles=(('Tự nhiên','ノーマル'),)),
     dict(model='6d11c6c2-f4a4-4435-887e-23dd60f8b8dd',speaker='bf56410a-d8e6-430d-a477-f789e16206d3',
          name='Nise — Nam · Trẻ, tự nhiên, hội thoại',styles=(('Tự nhiên','ノーマル'),)),
+    dict(model='f493ab6c-1ffa-4534-9bbd-2ba398f17cd5',speaker='c99b650e-4d24-4528-a7a3-6d0f9692f839',
+         name='Sukiyaki Umataro — Nam · Trẻ, thấp, điềm tĩnh',styles=(('Tự nhiên','ノーマル'),),license='CC0'),
+    dict(model='21d8d535-f206-462d-a3bb-05f8252dede7',speaker='161ab385-07a5-4dd6-a045-5b0f21dfd9ec',
+         name='Satsuki — Nữ · Trẻ, tự nhiên, nhiều sắc thái',styles=(('Tự nhiên','ノーマル'),('Buồn','kanasimi_kanasimi'),('Vui','uresii_uresii'),('Bình thường','hutuu_hutuu'),('Ngạc nhiên','odoroki_odoroki'))),
+    dict(model='f83c385c-829b-40c4-8c11-639027e61636',speaker='ef92118d-eda3-49d9-858d-1e9ae4dae714',
+         name='Wakana — Nữ · Trẻ, sáng, biểu cảm',styles=(('Tự nhiên','ノーマル'),('Buồn','悲しい'),('Vui','嬉しい'),('Bình thường','普通'),('Ngạc nhiên','驚き'))),
+    dict(model='b1b8072f-809f-4c6d-9ba1-2ca94d9c3663',speaker='4a43610f-8ace-4fe2-9541-eb26255f1927',
+         name='Rena — Nữ · Trẻ, tự nhiên, hội thoại',styles=(('Tự nhiên','ノーマル'),('Buồn','kanasimi_kanasimi'),('Vui','uresii_uresii'),('Bình thường','hutuu_hutuu'),('Ngạc nhiên','odoroki_odoroki'))),
+    dict(model='9a7feb22-b6f3-4f79-92d9-26849e063fa1',speaker='47ddff3b-10b4-48e8-8d5d-692461fa7f96',
+         name='Moe — Nữ · Trẻ, mềm, nhiều sắc thái',styles=(('Tự nhiên','ノーマル'),('Buồn','kanasimi_kanasimi'),('Vui','uresii_uresii'),('Bình thường','hutuu_hutuu'),('Ngạc nhiên','odoroki_odoroki'))),
 )
 
 def engine_data_root():
@@ -137,7 +152,8 @@ class AivisPack:
         for meta in EXTRA_VOICES:
             if models is None or not (models/(meta['model']+'.aivmx')).is_file():continue
             styles=tuple(dict(id=i,name=display,source_name=source) for i,(display,source) in enumerate(meta['styles']))
-            voices.append(VoiceInfo('aivis:'+meta['speaker'],meta['name'],'Japanese','Aivis',meta['speaker'],-1,styles,'ACML-1.0 • Thương mại có điều kiện',HUB+meta['model']))
+            license_name=meta.get('license','ACML-1.0 • Thương mại có điều kiện')
+            voices.append(VoiceInfo('aivis:'+meta['speaker'],meta['name'],'Japanese','Aivis',meta['speaker'],-1,styles,license_name,HUB+meta['model']))
         return LocalVoicevoxBackend('Aivis',10103,voices,self.engine.start)
     def close(self):
         if self.engine:self.engine.close()
