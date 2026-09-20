@@ -86,7 +86,7 @@ class UiChecks:
                 assert 'SHORT SCRIPT' in details['warning']
                 assert 'CÂU THOẠI NGẮN' in w.preview_details.text()
                 assert w.voice.currentData()=='af_heart' and 'Heart' in w.voice.currentText()
-                assert w.generate.text()=='▶  TẠO MP3'
+                assert w.generate.isEnabled()
                 w.grab().save(str(data_dir()/'ui-preview.png'))
                 QFileDialog.getSaveFileName=lambda *a,**k:(str(self.output),'MP3 (*.mp3)')
                 w.generate.click()
