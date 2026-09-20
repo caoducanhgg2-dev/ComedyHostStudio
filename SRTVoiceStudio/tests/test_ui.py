@@ -100,6 +100,21 @@ def test_voice_catalog_filters_favorites_and_selects_same_backend(app,tmp_path,m
         p.list.setCurrentRow(capcut_index)
         assert not p.use.isEnabled()
         assert 'CapCut tham khảo' in p.details.toPlainText()
+
+        p.filter.setCurrentIndex(p.filter.findData('vi'))
+        # Vietnam: 10 optional Korva + 7 CapCut reference profiles before Korva install.
+        assert p.list.count()==17
+        assert '17 giọng Việt' in p.status.text() and '0 đã cài' in p.status.text()
+        assert '10 chờ model' in p.status.text() and '7 CapCut tham khảo' in p.status.text()
+        assert any(p.list.item(i).data(256)=='korva:bao_kim' for i in range(p.list.count()))
+        assert any(p.list.item(i).data(256)=='capcut:vn:confident_male' for i in range(p.list.count()))
+
+        p.filter.setCurrentIndex(p.filter.findData('capcut'))
+        assert p.list.count()==31
+        assert '31 profile CapCut' in p.status.text()
+        assert all(str(p.list.item(i).data(256)).startswith('capcut:') for i in range(p.list.count()))
+
+        p.filter.setCurrentIndex(p.filter.findData('ja'))
         # Pick an installed Kokoro voice to verify favorite/use behavior remains intact.
         installed_index=next(i for i in range(p.list.count()) if p.list.item(i).data(256)=='jf_alpha')
         p.list.setCurrentRow(installed_index)
