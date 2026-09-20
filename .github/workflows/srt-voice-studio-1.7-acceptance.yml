@@ -91,7 +91,7 @@ jobs:
           print({'sfx_qa_iterations':passed,'medium_relative_rms':r['events'][0]['relative_rms'],'all_passed':True})
           '@ | python -
 
-      - name: Build final frozen 1.6.1 app
+      - name: Build final frozen 1.7.0 app
         working-directory: SRTVoiceStudio
         run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
 
@@ -175,7 +175,7 @@ jobs:
       - name: Download exact released 1.6.1 update
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Update_1.6.1_to_1.7.0
+          name: SRTVoiceStudio_Update_1.6.0_to_1.6.1
           run-id: 35253501374
           github-token: ${{ github.token }}
           path: baseline-161-update
@@ -209,7 +209,7 @@ jobs:
           Apply-Zip 'baseline-151-update' 'SRTVoiceStudio_Update_1.5.0_to_1.5.1.zip' $env:BASE_151_SHA256 'base151'
           Apply-Zip 'baseline-152-update' 'SRTVoiceStudio_Update_1.5.1_to_1.5.2.zip' $env:BASE_152_SHA256 'base152'
           Apply-Zip 'baseline-160-update' 'SRTVoiceStudio_Update_1.5.2_to_1.6.0.zip' $env:BASE_160_SHA256 'base160'
-          Apply-Zip 'baseline-161-update' 'SRTVoiceStudio_Update_1.6.1_to_1.7.0.zip' $env:BASE_161_SHA256 'base161'
+          Apply-Zip 'baseline-161-update' 'SRTVoiceStudio_Update_1.6.0_to_1.6.1.zip' $env:BASE_161_SHA256 'base161'
           $reg='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
           if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.6.1') { throw 'Expected exact 1.6.1 baseline.' }
 
@@ -228,7 +228,7 @@ jobs:
             --baseline-run 35253501374
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify small 1.6.1 delta
+      - name: Verify small 1.7.0 delta
         working-directory: SRTVoiceStudio
         shell: pwsh
         run: |
