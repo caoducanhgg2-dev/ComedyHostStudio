@@ -128,7 +128,6 @@ def _install_quality_reporting(window):
     base_success = window.success
 
     def success_17(task, result):
-        base_success(task, result)
         if task == "cache_caption" and isinstance(result, dict):
             item = next((x for x in window.multi_file_panel.queue.items
                          if x.id == getattr(window, "_v17_retry_item_id", None)), None)
@@ -142,6 +141,7 @@ def _install_quality_reporting(window):
                 f"Đã tạo lại TTS câu {getattr(window, '_v17_retry_caption', '?')} · "
                 "các caption cache khác được giữ nguyên.")
             return
+        base_success(task, result)
         if task == "render" and isinstance(result, dict):
             quality = dict(result.get("quality") or {})
             cache = (
