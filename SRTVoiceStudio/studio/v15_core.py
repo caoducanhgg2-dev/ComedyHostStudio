@@ -126,7 +126,8 @@ def save_batch_queue(queue: BatchQueue, path=None):
         items.append(dict(source=str(item.source), settings=asdict(item.settings), id=item.id,
             state=item.state, progress=item.progress, captions=item.captions,
             duration_ms=item.duration_ms, output=item.output, error=item.error,
-            report=item.report if isinstance(item.report, dict) else {}))
+            report=item.report if isinstance(item.report, dict) else {},
+            sfx_overrides=list(item.sfx_overrides or ())))
     _atomic_json(path, {'version': 1, 'items': items})
 
 
@@ -154,6 +155,8 @@ def load_batch_queue(path=None):
             item.output = str(raw.get('output', ''))
             item.error = str(raw.get('error', ''))
             item.report = raw.get('report', {}) if isinstance(raw.get('report', {}), dict) else {}
+            raw_overrides = raw.get('sfx_overrides', [])
+            item.sfx_overrides = tuple(x for x in raw_overrides if isinstance(x, dict)) if isinstance(raw_overrides, list) else ()
             # A process crash must never leave a permanently RUNNING row.
             if item.state == RUNNING:
                 item.state, item.progress, item.error = WAITING, 0, 'Khôi phục sau khi ứng dụng đóng giữa tác vụ.'
