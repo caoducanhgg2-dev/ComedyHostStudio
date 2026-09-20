@@ -120,3 +120,23 @@ def test_smart_fit3_tab_and_apply_button_enable_neighbor_smoothing(app, tmp_path
         assert "Smart Fit 3.0" in w.status.text()
     finally:
         w.close()
+
+
+def test_unified_single_file_queue_enables_generate(app, tmp_path, monkeypatch):
+    w = _window(app, tmp_path, monkeypatch)
+    try:
+        srt = tmp_path / "single.srt"
+        srt.write_text(
+            "1\n00:00:00,000 --> 00:00:02,000\nSingle file smoke.\n",
+            encoding="utf-8")
+        w.multi_file_panel.queue.items = []
+        w.batch_panel.refresh()
+        assert not w.generate.isEnabled()
+        added = w.multi_file_panel.add_paths([srt])
+        assert len(added) == 1
+        assert w.multi_file_panel.selected() is not None
+        assert w.file.text().strip() == str(srt)
+        assert w.settings().voice in w.backend.routes
+        assert w.generate.isEnabled()
+    finally:
+        w.close()
