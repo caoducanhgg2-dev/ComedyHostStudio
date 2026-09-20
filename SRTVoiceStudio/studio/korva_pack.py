@@ -20,13 +20,15 @@ LICENSE_NOTICE=(
     'Gói model được tải riêng, ghim theo revision và kiểm tra SHA-256 trước khi kích hoạt.'
 )
 
-# path, exact bytes, SHA-256. Large-file ETags were resolved from the pinned
-# Hugging Face Xet revision; JSON/style SHA-256 values were computed in CI.
+# path, exact bytes, SHA-256. IMPORTANT: Hugging Face Xet hash is NOT the
+# downloadable file SHA-256. The four ONNX values below use the SHA256 field
+# published by Hugging Face for the pinned revision; JSON/style hashes remain
+# content SHA-256 values computed from the pinned files.
 FILES=(
- ('onnx/duration_predictor.onnx',3573391,'26d385840e93bda0395013b719464894d86fb5fb705099de38a759529d27a882'),
- ('onnx/text_encoder.onnx',35678255,'e130d8960cd4c0008ef021a62bfceebb30bec3106d660df1e9d3a0f589853507'),
- ('onnx/vector_estimator.onnx',256700640,'f78d2893feaca9ee7eb54e892d7c65deb4793e5b5e68f6a47a5c594d4696970a'),
- ('onnx/vocoder.onnx',101426104,'91795b4dd3ad3b05e5095332aeaf3999f889fd8496e016682da60092c5ed9295'),
+ ('onnx/duration_predictor.onnx',3573391,'c59dd540d003e781f55efc3f39807ad9939164a34dbc74eb05f39ab41b4632d7'),
+ ('onnx/text_encoder.onnx',35678255,'4522eea5c39f68c101f27fc14758cc65311a4abfc64500ddf32e6d582de5daab'),
+ ('onnx/vector_estimator.onnx',256700640,'f7a5abb7feca5e657977781953cd30997869eb54363bdcc729e848b4c7ca2702'),
+ ('onnx/vocoder.onnx',101426104,'7d305c4cc06e9cd2ac47834d90e9b97b69df316cbda75682dd0f4c17d289324f'),
  ('onnx/tts.json',8493,'d9b6bd2844a45ecccfd521b2defeaf74d45ea23e8cc099b980c1e0198c7f2365'),
  ('onnx/unicode_indexer.json',277676,'9bf7346e43883a81f8645c81224f786d43c5b57f3641f6e7671a7d6c493cb24f'),
  ('voice_styles/bao_kim.json',271241,'89cd8c7d9c834118b523d04ba8d556e7664fc9c3fc7fd5247194355d2561234b'),
