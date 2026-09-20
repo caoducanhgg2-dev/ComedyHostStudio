@@ -9,6 +9,8 @@ ACML_URL='https://github.com/Aivis-Project/ACML/blob/master/ACML-1.0.md'
 HUB='https://hub.aivis-project.com/aivm-models/'
 KORVA_SOURCE='https://huggingface.co/dogenthq/KorvaTTS'
 KORVA_LICENSE='Apache-2.0'
+CAPCUT_SOURCE='https://www.capcut.com/tools/text-to-speech'
+CAPCUT_NOTICE='CapCut • voice availability phụ thuộc tài khoản, khu vực và phiên bản; mục này chỉ là catalog tham khảo.'
 
 def _aivis_dynamic(voice_id,name,speaker,model,styles,license_text='ACML-1.0 • Thương mại có điều kiện'):
     return VoiceInfo(
@@ -97,6 +99,65 @@ KORVA_CATALOG=tuple(
     for key,display,gender in _KORVA
 )
 
+
+def _capcut(market,key,name,language,gender,trait,use_case):
+    region={'English US':'US','English UK':'UK','Japanese':'JP','Vietnamese':'VN'}[language]
+    return VoiceInfo(
+        f'capcut:{market}:{key}',
+        f'{name} — {gender} · {trait}',
+        language,'CapCut','',0,(),
+        'Dịch vụ CapCut • điều khoản/khả dụng do CapCut quản lý',CAPCUT_SOURCE)
+
+# Reference-only CapCut profiles grouped by target market. These entries never
+# route to synthesis in SRT Voice Studio; they help users find the matching
+# style in CapCut while keeping local/offline backends authoritative.
+CAPCUT_REFERENCE_CATALOG=(
+    # US / American short-form
+    _capcut('us','male_storyteller','Male Storyteller','English US','Nam','kể chuyện, rõ, chắc','documentary / history / survival'),
+    _capcut('us','female_storyteller','Female Storyteller','English US','Nữ','kể chuyện, tự nhiên','renovation / storytime / review'),
+    _capcut('us','professor','Professor','English US','Nam','đĩnh đạc, giải thích','history / educational'),
+    _capcut('us','serious_female','Serious Female','English US','Nữ','nghiêm túc, trưởng thành','documentary / news-style'),
+    _capcut('us','jessie','Jessie','English US','Nữ','trẻ, tự nhiên','TikTok / lifestyle / reviewer'),
+    _capcut('us','bestie','Bestie','English US','Nữ','thân thiện, hội thoại','reaction / lifestyle'),
+    _capcut('us','chill_girl','Chill Girl','English US','Nữ','nhẹ, thư giãn','review / vlog'),
+    _capcut('us','energetic_female','Energetic Female','English US','Nữ','năng lượng, nhanh','viral shorts / challenge'),
+    _capcut('us','energetic_male','Energetic Male','English US','Nam','năng lượng, mạnh','challenge / sports / reaction'),
+    _capcut('us','confident_male','Confident Male','English US','Nam','tự tin, chắc','review / documentary'),
+    _capcut('us','witty','Witty','English US','Trung tính','dí dỏm, nhịp nhanh','comedy / reviewer'),
+    _capcut('us','trickster','Trickster','English US','Trung tính','tinh nghịch, hoạt náo','comedy / reaction'),
+
+    # UK market fit. These are CapCut profile names, not a guarantee of a
+    # British-accent variant on every account/region.
+    _capcut('uk','male_storyteller','Male Storyteller','English UK','Nam','kể chuyện, rõ','documentary / storytime'),
+    _capcut('uk','female_storyteller','Female Storyteller','English UK','Nữ','kể chuyện, mềm','review / lifestyle'),
+    _capcut('uk','professor','Professor','English UK','Nam','đĩnh đạc, giải thích','history / educational'),
+    _capcut('uk','serious_female','Serious Female','English UK','Nữ','nghiêm túc, rõ','documentary'),
+    _capcut('uk','witty','Witty','English UK','Trung tính','dí dỏm, gọn','comedy / commentary'),
+    _capcut('uk','confident_male','Confident Male','English UK','Nam','chắc, tự tin','review / narration'),
+
+    # Japan market fit.
+    _capcut('jp','kawaii_vocalist','Kawaii Vocalist','Japanese','Nữ','cute, sáng, anime-like','kawaii / character / short-form'),
+    _capcut('jp','anime_girl','Anime Girl','Japanese','Nữ','anime, biểu cảm','reaction / anime / comedy'),
+    _capcut('jp','kiddo','Kiddo','Japanese','Trẻ','nhí, hoạt hình','comedy / character'),
+    _capcut('jp','witty','Witty','Japanese','Trung tính','dí dỏm, hợp ツッコミ','review / comedy'),
+    _capcut('jp','female_storyteller','Female Storyteller','Japanese','Nữ','kể chuyện, mềm','storytime / renovation'),
+    _capcut('jp','male_storyteller','Male Storyteller','Japanese','Nam','kể chuyện, chắc','documentary / survival'),
+
+    # Vietnam market fit.
+    _capcut('vn','female_storyteller','Female Storyteller','Vietnamese','Nữ','kể chuyện, tự nhiên','storytime / review'),
+    _capcut('vn','male_storyteller','Male Storyteller','Vietnamese','Nam','kể chuyện, rõ','documentary / history'),
+    _capcut('vn','serious_female','Serious Female','Vietnamese','Nữ','nghiêm túc, trưởng thành','documentary / giải thích'),
+    _capcut('vn','confident_male','Confident Male','Vietnamese','Nam','tự tin, chắc','review / thuyết minh'),
+    _capcut('vn','energetic_female','Energetic Female','Vietnamese','Nữ','năng lượng, nhanh','viral short / challenge'),
+    _capcut('vn','energetic_male','Energetic Male','Vietnamese','Nam','năng lượng, mạnh','reaction / challenge'),
+    _capcut('vn','bestie','Bestie','Vietnamese','Nữ','thân thiện, hội thoại','lifestyle / reaction'),
+)
+
+_CAPCUT_USE_CASE={
+    v.id: v.name.split(' · ',1)[-1] for v in CAPCUT_REFERENCE_CATALOG
+}
+
+
 OPTIONAL_CATALOG=AIVIS_CATALOG+KORVA_CATALOG
 
 def catalog_voices(language=None):
@@ -109,6 +170,18 @@ def aivis_catalog():
 
 def korva_catalog():
     return KORVA_CATALOG
+
+def capcut_reference_voices(language=None):
+    if language is None:
+        return CAPCUT_REFERENCE_CATALOG
+    return tuple(v for v in CAPCUT_REFERENCE_CATALOG if v.language==language)
+
+def capcut_reference_ids():
+    return {v.id for v in CAPCUT_REFERENCE_CATALOG}
+
+def is_capcut_reference(voice):
+    voice_id=voice.id if hasattr(voice,'id') else voice
+    return isinstance(voice_id,str) and voice_id.startswith('capcut:')
 
 def catalog_ids():
     return {v.id for v in OPTIONAL_CATALOG}
