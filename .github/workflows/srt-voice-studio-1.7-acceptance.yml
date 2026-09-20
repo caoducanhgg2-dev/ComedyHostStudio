@@ -339,3 +339,5 @@ jobs:
             SRTVoiceStudio/update-output-170/final-acceptance-1.7.0.json
             SRTVoiceStudio/update-output-170/update_manifest.json
           retention-days: 90
+
+# Publication rerun: localized Continuous Voice warning and installer smoke semantics.
