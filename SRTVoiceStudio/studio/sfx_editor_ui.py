@@ -37,7 +37,7 @@ class SfxEditorPanel(QWidget):
 
         controls = QHBoxLayout()
         self.enabled = QCheckBox("Dùng cue này")
-        self.enabled.setChecked(True)
+        self.enabled.setChecked(event.caption_index not in self.disabled_captions)
         self.kind = QComboBox()
         for key, label in KIND_LABELS.items():
             self.kind.addItem(label, key)
@@ -103,6 +103,7 @@ class SfxEditorPanel(QWidget):
     def refresh(self):
         item = self.current_item()
         self.events = []
+        self.disabled_captions = set()
         self.table.setRowCount(0)
         if item is None:
             self.status.setText("Chọn một file trong Workspace để chỉnh SFX.")
@@ -113,6 +114,16 @@ class SfxEditorPanel(QWidget):
             base = plan_sfx(captions, settings.language, settings.sfx_density)
             self.events = apply_sfx_overrides(
                 base, captions, item.sfx_overrides, settings.language)
+            raw_overrides = [x for x in item.sfx_overrides if isinstance(x, dict)]
+            self.disabled_captions = {
+                int(x.get("caption")) for x in raw_overrides
+                if str(x.get("caption", "")).isdigit() and not bool(x.get("enabled", True))
+            }
+            rendered_captions = {e.caption_index for e in self.events}
+            for event in base:
+                if event.caption_index in self.disabled_captions and event.caption_index not in rendered_captions:
+                    self.events.append(event)
+            self.events.sort(key=lambda e: (e.start_ms, e.caption_index))
         except Exception as exc:
             self.status.setText("Không phân tích được SFX: " + str(exc))
             return
@@ -126,8 +137,10 @@ class SfxEditorPanel(QWidget):
                 str(event.caption_index),
                 display_time(event.start_ms),
                 KIND_LABELS.get(event.kind, event.kind),
-                "Thủ công" if getattr(event, "manual", False) else "Auto",
-                f"{float(getattr(event, 'gain_scale', 1.0)):.2f}×",
+                ("Tắt thủ công" if event.caption_index in self.disabled_captions
+                 else ("Thủ công" if getattr(event, "manual", False) else "Auto")),
+                ("—" if event.caption_index in self.disabled_captions
+                 else f"{float(getattr(event, 'gain_scale', 1.0)):.2f}×"),
                 event.reason,
             ]
             for col, value in enumerate(values):
