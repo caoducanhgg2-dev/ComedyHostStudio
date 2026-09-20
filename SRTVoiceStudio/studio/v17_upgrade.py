@@ -109,25 +109,13 @@ def _install_workspace_controls(window):
         item = panel.selected()
         caption_pos = window.caption_select.currentData()
         if item is None or caption_pos is None or not (0 <= caption_pos < len(window.captions)):
-            window.status.setText("Hãy chọn một tệp và một caption cần làm mới TTS.")
+            window.status.setText("Hãy chọn một tệp và một caption cần tạo lại TTS.")
             return
         caption = window.captions[caption_pos]
         settings = window.settings()
-        try:
-            removed = TtsCache().invalidate(settings, caption.text)
-        except OSError as exc:
-            window.status.setText("Không truy cập được Render Cache: " + str(exc))
-            return
-        if item.state in (DONE, FAILED, CANCELLED):
-            item.state = WAITING
-            item.progress = 0
-            item.error = ""
-            item.report = {}
-        window.batch_panel.refresh()
-        window.status.setText(
-            f"Câu {caption.index}: " +
-            ("đã xóa cache TTS" if removed else "chưa có cache cũ") +
-            " · tệp đã đưa về Chờ để render lại an toàn.")
+        window._v17_retry_item_id = item.id
+        window._v17_retry_caption = caption.index
+        window.start("cache_caption", dict(text=caption.text, settings=settings))
 
     panel.retry_caption_button.clicked.connect(retry_selected_caption)
 
@@ -141,6 +129,19 @@ def _install_quality_reporting(window):
 
     def success_17(task, result):
         base_success(task, result)
+        if task == "cache_caption" and isinstance(result, dict):
+            item = next((x for x in window.multi_file_panel.queue.items
+                         if x.id == getattr(window, "_v17_retry_item_id", None)), None)
+            if item is not None and item.state in (DONE, FAILED, CANCELLED):
+                item.state = WAITING
+                item.progress = 0
+                item.error = ""
+                item.report = {}
+                window.batch_panel.refresh()
+            window.status.setText(
+                f"Đã tạo lại TTS câu {getattr(window, '_v17_retry_caption', '?')} · "
+                "các caption cache khác được giữ nguyên.")
+            return
         if task == "render" and isinstance(result, dict):
             quality = dict(result.get("quality") or {})
             cache = (
