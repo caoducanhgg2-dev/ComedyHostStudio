@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from .sfx import KIND_LABELS, plan_sfx
-from .sfx_editor import apply_sfx_overrides
+from .sfx_editor import apply_sfx_overrides, EditedSfxEvent
 from .timeline import read_srt, display_time
 
 
@@ -123,6 +123,29 @@ class SfxEditorPanel(QWidget):
             for event in base:
                 if event.caption_index in self.disabled_captions and event.caption_index not in rendered_captions:
                     self.events.append(event)
+                    rendered_captions.add(event.caption_index)
+            by_caption = {c.index: c for c in captions}
+            for override in raw_overrides:
+                if bool(override.get("enabled", True)):
+                    continue
+                try:
+                    caption_index = int(override.get("caption"))
+                except (TypeError, ValueError):
+                    continue
+                if caption_index in rendered_captions or caption_index not in by_caption:
+                    continue
+                caption = by_caption[caption_index]
+                kind = str(override.get("kind") or "accent")
+                if kind not in KIND_LABELS:
+                    kind = "accent"
+                self.events.append(EditedSfxEvent(
+                    caption_index=caption_index,
+                    start_ms=int(caption.start + 120),
+                    kind=kind,
+                    score=0,
+                    reason="manual:disabled",
+                    gain_scale=float(override.get("gain_scale", 1.0) or 1.0),
+                    manual=True))
             self.events.sort(key=lambda e: (e.start_ms, e.caption_index))
         except Exception as exc:
             self.status.setText("Không phân tích được SFX: " + str(exc))
