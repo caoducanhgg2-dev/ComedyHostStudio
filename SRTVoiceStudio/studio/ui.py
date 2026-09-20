@@ -399,11 +399,15 @@ class Window(QMainWindow):
 
     def refresh_controls(self):
         idle = not self.busy()
-        self.native_style.setEnabled(idle and self.native_style.count()>1)
+        valid_voice=self.voice.currentData() in self.backend.routes
+        self.generate.setEnabled(idle and valid_voice)
+        self.native_style.setEnabled(idle and valid_voice and self.native_style.count()>1)
         self.emotion.setEnabled(idle and self.emotion_mode.currentData() == 'Manual')
         self.intensity.setEnabled(idle and self.emotion_mode.currentData() == 'Manual' and self.emotion.currentData() != 'Natural')
         self.strength.setEnabled(idle and self.effect.currentData() != 'None')
-        self.preview_buttons[2].setEnabled(idle and self.caption_select.currentData() is not None)
+        self.preview_buttons[0].setEnabled(idle and valid_voice)
+        self.preview_buttons[1].setEnabled(idle and valid_voice)
+        self.preview_buttons[2].setEnabled(idle and valid_voice and self.caption_select.currentData() is not None)
 
     def invalidate_base(self, *_):
         if self.busy():
