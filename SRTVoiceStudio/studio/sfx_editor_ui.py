@@ -113,8 +113,11 @@ class SfxEditorPanel(QWidget):
 
     def refresh(self):
         item = self.current_item()
+        previous = self.selected_event()
+        previous_caption = previous.caption_index if previous is not None else None
         self.events = []
         self.disabled_captions = set()
+        self.table.blockSignals(True)
         self.table.setRowCount(0)
         if item is None:
             self.status.setText("Chọn một file trong Workspace để chỉnh SFX.")
@@ -159,6 +162,7 @@ class SfxEditorPanel(QWidget):
                     manual=True))
             self.events.sort(key=lambda e: (e.start_ms, e.caption_index))
         except Exception as exc:
+            self.table.blockSignals(False)
             self.status.setText("Không phân tích được SFX: " + str(exc))
             return
 
@@ -179,6 +183,16 @@ class SfxEditorPanel(QWidget):
             ]
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(value))
+        selected_row = next(
+            (row for row, event in enumerate(self.events)
+             if event.caption_index == previous_caption), -1)
+        if selected_row < 0 and self.events:
+            selected_row = 0
+        if selected_row >= 0:
+            self.table.selectRow(selected_row)
+        self.table.blockSignals(False)
+        if selected_row >= 0:
+            self.load_selected()
         self.status.setText(
             f"{item.source.name} · {len(self.events)} cue sau chỉnh sửa · "
             f"{len(overrides)} caption có override riêng.")
