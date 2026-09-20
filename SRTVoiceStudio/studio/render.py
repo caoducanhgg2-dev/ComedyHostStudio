@@ -194,6 +194,11 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
             summary['quality_issues'] = summary['quality']['issues']
             progress(len(slots), len(slots),
                      f"QC {summary['quality_status']} • MP3 cuối đã được decode kiểm tra")
+            if summary['quality_status'] == 'FAIL':
+                reasons = '; '.join(
+                    str(issue.get('message') or issue.get('code') or 'QC error')
+                    for issue in summary['quality_issues'])
+                raise RuntimeError('FINAL QC FAILED · ' + reasons)
             os.replace(staged, output)
         finally:
             Path(staged).unlink(missing_ok=True)
