@@ -108,3 +108,112 @@ def test_final_encoded_qc_duration_drift_and_click_spike_are_detected(tmp_path):
     assert "ENCODE_CLICK_SPIKE" in codes
     assert "ENCODE_DURATION_DRIFT" in codes
     assert report["status"] == "FAIL"
+
+
+def test_batch_common_settings_preserve_per_file_sfx_overrides(tmp_path):
+    from studio.batch import BatchQueue
+    from studio.render import Settings
+    import threading
+
+    a = tmp_path / "a.srt"
+    b = tmp_path / "b.srt"
+    body = "1\n00:00:00,000 --> 00:00:01,500\nFinally completed!\n"
+    a.write_text(body, encoding="utf-8")
+    b.write_text(body, encoding="utf-8")
+
+    queue = BatchQueue()
+    base = Settings(language="English US", voice="af_heart")
+    items = queue.add([a, b], base)
+    items[0].sfx_overrides = ({"caption": 1, "enabled": False, "kind": "chime",
+                               "offset_ms": 0, "gain_scale": 1.0},)
+    items[1].sfx_overrides = ({"caption": 1, "enabled": True, "kind": "comic",
+                               "offset_ms": 100, "gain_scale": 1.3},)
+
+    seen = []
+    def fake_renderer(source, output, settings, backend, cancel, progress):
+        seen.append((source.name, settings.speed, settings.sfx_overrides))
+        Path(output).write_bytes(b"fake")
+        return {"output": str(output), "quality": {"status": "PASS"}}
+
+    common = Settings(language="English US", voice="af_heart", speed=1.07)
+    queue.run(object(), output_dir=tmp_path / "out", common_settings=common,
+              renderer=fake_renderer)
+
+    assert len(seen) == 2
+    assert all(speed == 1.07 for _, speed, _ in seen)
+    assert seen[0][2][0]["enabled"] is False
+    assert seen[1][2][0]["kind"] == "comic"
+
+
+def test_render_cache_is_used_on_second_render_without_recalling_tts(tmp_path, monkeypatch):
+    import threading
+    import studio.render as render_module
+    from studio.render import Settings
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    srt = tmp_path / "cache.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,500\nHello cache.\n", encoding="utf-8")
+
+    calls = {"tts": 0}
+    raw = (0.05 * np.sin(np.linspace(0, 100, 12000))).astype(np.float32)
+
+    def fake_synth(backend, text, settings, cancel, progress):
+        calls["tts"] += 1
+        return raw.copy(), 48000
+
+    def fake_fit(samples, rate, slot, settings, emotion_tempo, folder, cancel, previous_speed=None):
+        n = min(len(samples), slot.end - slot.start)
+        fitted = samples[:n].copy()
+        trailing = max(0.0, (slot.end - slot.start - n) / 48000)
+        return fitted, dict(
+            caption=slot.caption.index, start_sample=slot.start,
+            end_sample=slot.start+n, allowed_end=slot.end,
+            audible_end_sample=slot.start+n,
+            processed_seconds=len(samples)/rate,
+            processed_seconds_before_continuity_trim=len(samples)/rate,
+            available_seconds=(slot.end-slot.start)/48000,
+            classification="FIT", fit_status="GOOD",
+            continuous_mode=False, target_transition_seconds=None,
+            target_trailing_seconds=.15, configured_gap_seconds=.1,
+            speed=1.0, emotion_tempo=1.0, fit_tempo=1.0, requested_speed=1.0,
+            trimmed=False, trimmed_samples=0, raw_tail_trimmed_samples=0,
+            final_seconds=n/48000, overlaps=0, initial_trailing_seconds=trailing,
+            raw_trailing_silence=trailing, internal_audible_trailing_silence=trailing,
+            transition_silence=trailing, trailing_silence=trailing,
+            underfill_detected=False, underfilled=False, underfill_adjusted=False,
+            speed_up=False, slow_down=False, underfilled_at_hard_minimum=False,
+            continuous_refit_passes=0, post_dsp_trimmed_start=0.0,
+            post_dsp_trimmed_end=0.0, post_dsp_trimmed_seconds=0.0,
+            minimum_effective_speed=.88, warning="",
+            smart_fit3=False, smart_fit3_neighbor_limited=False,
+            previous_caption_speed=previous_speed)
+
+    class FakeProcessor:
+        def __init__(self, *args, **kwargs): pass
+        def process(self, samples, rate, settings, text):
+            return samples, 1.0, "Natural", "Medium"
+
+    def fake_encode(master, destination, cancel):
+        Path(destination).write_bytes(b"fake-mp3")
+
+    def fake_mp3_metrics(path, folder, cancel):
+        return dict(peak=.4, rms=.08, dc=0.0, clipping_samples=0,
+                    clipping_fraction=0.0, non_finite=False,
+                    samples=72000, duration_seconds=1.5, max_step=.02)
+
+    monkeypatch.setattr(render_module, "synthesize_selected", fake_synth)
+    monkeypatch.setattr(render_module, "fit_processed", fake_fit)
+    monkeypatch.setattr(render_module, "EffectProcessor", FakeProcessor)
+    monkeypatch.setattr(render_module, "encode", fake_encode)
+    monkeypatch.setattr(render_module, "measure_encoded_mp3", fake_mp3_metrics)
+
+    settings = Settings(language="English US", voice="af_heart",
+                        use_render_cache=True, gap_ms=100)
+    first = render_module.render(
+        srt, tmp_path / "one.mp3", settings, object(), threading.Event())
+    second = render_module.render(
+        srt, tmp_path / "two.mp3", settings, object(), threading.Event())
+
+    assert calls["tts"] == 1
+    assert first["cache_hits"] == 0 and first["cache_misses"] == 1
+    assert second["cache_hits"] == 1 and second["cache_misses"] == 0
