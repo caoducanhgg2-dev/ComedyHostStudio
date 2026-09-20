@@ -10,7 +10,7 @@ import hashlib
 import winreg
 
 root=Path(__file__).resolve().parents[1]
-installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.7.2.exe'
+installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.8.0.exe'
 baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.3.0.exe'))
 assert len(baselines)==1, f'Expected one baseline installer, found: {baselines}'
 baseline=baselines[0]
@@ -19,7 +19,7 @@ with baseline.open('rb') as stream:
     assert hashlib.file_digest(stream,'sha256').hexdigest()==expected,'Baseline installer checksum mismatch'
 appkey=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
 appdata=Path(os.environ['LOCALAPPDATA'])/'SRTVoiceStudio'
-target_version='1.7.2'
+target_version='1.8.0'
 results={'version':target_version,'baseline_sha256':expected,'scenarios':{}}
 
 def registry():
