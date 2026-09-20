@@ -61,3 +61,42 @@ def test_17_retry_caption_invalidates_only_selected_cache(app, tmp_path, monkeyp
         assert cache.get(settings, second.text) is not None
     finally:
         w.close()
+
+
+def test_17_visual_qc_dashboard_and_caption_retry_success_path(app, tmp_path, monkeypatch):
+    w = _window(app, tmp_path, monkeypatch)
+    try:
+        srt = tmp_path / "qc.srt"
+        srt.write_text(
+            "1\n00:00:00,000 --> 00:00:02,000\n完成しました。\n",
+            encoding="utf-8")
+        item = w.multi_file_panel.add_paths([srt])[0]
+        assert w.tabs.indexOf(w.quality_panel) >= 0
+        assert w.tabs.tabText(w.tabs.indexOf(w.quality_panel)) == "QC 1.7"
+
+        from studio.batch import DONE, WAITING
+        item.state = DONE
+        item.output = str(tmp_path / "qc_Voice.mp3")
+        item.report = {
+            "quality": {"status": "WARN", "issues": [
+                {"code": "TRIMMED_CAPTIONS", "message": "1 caption đã phải cắt an toàn."}
+            ]},
+            "safely_trimmed": 1,
+            "transitions_over_08": 0,
+            "auto_sfx": False,
+            "cache_hits": 1,
+            "cache_misses": 0,
+            "master_metrics": {"peak": .5, "rms": .1, "dc": 0.0, "clipping_samples": 0},
+        }
+        w.quality_panel.refresh()
+        assert w.quality_panel.table.item(0, 1).text() == "WARN"
+        assert "cắt an toàn" in w.quality_panel.details.toPlainText()
+
+        w._v17_retry_item_id = item.id
+        w._v17_retry_caption = 1
+        w.success("cache_caption", {"cache_key": "x", "samples": 100, "rate": 48000})
+        assert item.state == WAITING
+        assert item.report == {}
+        assert "Đã tạo lại TTS câu 1" in w.status.text()
+    finally:
+        w.close()
