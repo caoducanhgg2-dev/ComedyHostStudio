@@ -90,7 +90,8 @@ def packs():
     result=[Pack('aivis-engine-windows','1.2.0',ENGINE_SOURCE+'/releases/download/1.2.0/AivisSpeech-Engine-Windows-x64-1.2.0.7z.001',
         'bfbceba2e14dc7f23c7f3695f9ac0381baf91b15d6544e98384574eaadd271f3',216525495,'7z','engine.7z','LGPL-3.0',ENGINE_SOURCE)]
     for uid,version,size,sha in MODEL_PACKS:
-        result.append(Pack('aivis-'+uid,version,'https://api.aivis-project.com/v1/aivm-models/'+uid+'/download?model_type=AIVMX',sha,size,'raw',uid+'.aivmx','ACML-1.0',HUB+uid))
+        license_name='CC0' if uid=='f493ab6c-1ffa-4534-9bbd-2ba398f17cd5' else 'ACML-1.0'
+        result.append(Pack('aivis-'+uid,version,'https://api.aivis-project.com/v1/aivm-models/'+uid+'/download?model_type=AIVMX',sha,size,'raw',uid+'.aivmx',license_name,HUB+uid))
     for name,size,sha in [
         ('model_fp16.onnx',653075699,'23f633ae7c5900ff82b35a428b67a54e7e7911d5d6a6dcfc77967be8f1c94dc6'),
         ('tokenizer_config.json',520,'1cc5203f09ecac12bb7a98a05cb9c2e39a9e37a113a7d85d12542ef29190583b'),
