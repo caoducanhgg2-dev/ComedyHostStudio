@@ -1,0 +1,140 @@
+name: Publish SRT Voice Studio 1.7.1
+
+on:
+  push:
+    branches: ['release/srt-voice-studio-1.7.1']
+    paths:
+      - '.github/workflows/publish-srt-voice-studio-1.7.1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download accepted 1.7.1 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.6.2_to_1.7.0
+          run-id: 35520974950
+          github-token: ${{ github.token }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          path: accepted
+
+      - name: Validate accepted payload and create release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find accepted -type f -name 'SRTVoiceStudio_Update_1.7.0_to_1.7.1.zip' -print -quit)"
+          EVIDENCE="$(find accepted -type f -name 'final-acceptance-1.7.1.json' -print -quit)"
+          MANIFEST="$(find accepted -type f -name 'update_manifest.json' -print -quit)"
+          test -n "$ZIP" && test -f "$ZIP"
+          test -n "$EVIDENCE" && test -f "$EVIDENCE"
+          test -n "$MANIFEST" && test -f "$MANIFEST"
+
+          python - "$EVIDENCE" "$MANIFEST" <<'PY'
+          import json,sys
+          evidence=json.load(open(sys.argv[1],encoding='utf-8'))
+          manifest=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert evidence['version']=='1.7.1'
+          assert evidence['from_version']=='1.7.0'
+          assert evidence['exact_final_tree'] is True
+          assert evidence['rollback_passed'] is True
+          assert evidence['corruption_guard_passed'] is True
+          assert evidence['reapply_passed'] is True
+          assert evidence['aivis_japanese_catalog']==11
+          assert evidence['korva_vietnamese_catalog']==10
+          assert manifest['from_version']=='1.7.0'
+          assert manifest['to_version']=='1.7.1'
+          print('Accepted 1.7.1 evidence: PASS')
+          PY
+
+          mkdir -p release-files
+          cp "$ZIP" release-files/
+          cp "$EVIDENCE" release-files/
+          cp "$MANIFEST" release-files/
+          (cd release-files && sha256sum SRTVoiceStudio_Update_1.7.0_to_1.7.1.zip final-acceptance-1.7.1.json update_manifest.json > SHA256SUMS_RELEASE.txt)
+
+          cat > release-files/HUONG_DAN_SRTVoiceStudio_1.7.1.txt <<'EOF'
+          SRT Voice Studio 1.7.1 - Voice Expansion
+
+          Day la goi cap nhat nho tu SRT Voice Studio 1.7.0 len 1.7.1.
+          KHONG can cai lai toan bo ung dung.
+
+          Cach cap nhat:
+          1. Dong SRT Voice Studio.
+          2. Giai nen SRTVoiceStudio_Update_1.7.0_to_1.7.1.zip.
+          3. Chay Apply_Update.cmd.
+          4. Neu can quay lai ban 1.7.0, chay Rollback_Update.cmd.
+
+          Noi dung chinh:
+          - Mo rong thu vien Aivis Nhat len 11 giong.
+          - Them goi KorvaTTS Viet voi 10 giong local.
+          - Voice Library hien thi dac tinh, engine, trang thai cai dat va giay phep.
+          - Giu nguyen Adaptive Timeline, Continuous Voice, Auto SFX va quy trinh multi-file.
+          - Patch da qua kiem tra exact final tree, rollback, corruption guard va reapply.
+
+          Luu y:
+          - Goi nay yeu cau baseline SRT Voice Studio 1.7.0.
+          - Cac model Aivis/Korva la goi tuy chon, chi tai khi nguoi dung chon cai.
+          EOF
+
+          cat > release-notes.md <<'EOF'
+          ## SRT Voice Studio 1.7.1 — Voice Expansion
+
+          Bản cập nhật dạng **ZIP patch từ 1.7.0 → 1.7.1**, không cần cài lại toàn bộ ứng dụng.
+
+          ### Voice Expansion
+          - Aivis Nhật: **11 giọng** trong catalog mở rộng.
+          - KorvaTTS Việt: **10 giọng local**.
+          - Voice Library hiển thị đặc tính, engine, trạng thái đã cài/chưa cài và thông tin giấy phép.
+          - Model tùy chọn chỉ tải khi người dùng chủ động cài.
+
+          ### Tương thích được giữ nguyên
+          - Adaptive Timeline.
+          - Continuous Voice.
+          - Auto SFX.
+          - Multi-file workflow.
+          - Cơ chế patch ZIP và rollback về 1.7.0.
+
+          ### Acceptance
+          - Full regression: PASS.
+          - Voice Expansion gate: PASS.
+          - Frozen app: PASS.
+          - Exact final tree: PASS.
+          - Rollback: PASS.
+          - Corruption guard: PASS.
+          - Reapply: PASS.
+          - Delta: **7 file thay đổi**, payload ratio khoảng **1.0123%**.
+
+          SHA-256 của ZIP đã nghiệm thu:
+          `D5AB1EF5AACEC209758B4E39A0756BD221FAD73BE3C23E6E9F88BE0F573DB0A4`
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='srt-voice-studio-v1.7.1'
+          TARGET='8cf31b49812a92564d7da02aa90a0cd6b3eb5462'
+          TITLE='SRT Voice Studio 1.7.1 - Voice Expansion'
+          ASSETS=(
+            release-files/SRTVoiceStudio_Update_1.7.0_to_1.7.1.zip
+            release-files/final-acceptance-1.7.1.json
+            release-files/update_manifest.json
+            release-files/SHA256SUMS_RELEASE.txt
+            release-files/HUONG_DAN_SRTVoiceStudio_1.7.1.txt
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --target "$TARGET" --title "$TITLE" --notes-file release-notes.md --latest
+          fi
