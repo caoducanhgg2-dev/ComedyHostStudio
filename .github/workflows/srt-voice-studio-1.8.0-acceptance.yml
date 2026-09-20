@@ -378,3 +378,4 @@ jobs:
             SRTVoiceStudio/update-output-180/final-acceptance-1.8.0.json
             SRTVoiceStudio/update-output-180/update_manifest.json
           retention-days: 90
+# Final rerun: CapCut references visible in country voice dropdowns.
