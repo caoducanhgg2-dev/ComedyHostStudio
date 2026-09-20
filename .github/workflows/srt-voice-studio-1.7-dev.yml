@@ -68,8 +68,8 @@ jobs:
                   assert c.put(s,f'caption-{i}',x,48000)
                   y,r=c.get(s,f'caption-{i}')
                   assert r==48000 and np.allclose(x,y)
-          master=np.zeros(48000,dtype=np.float32)
-          master[1000:2000]=.2
+          t=np.arange(48000,dtype=np.float64)/48000.0
+          master=(.08*np.sin(2*np.pi*220*t)).astype(np.float32)
           q=analyze_render(dict(overlaps=0,safely_trimmed=0,
               underfilled_after_hard_minimum=0,transitions_over_08=0,
               auto_sfx=False,sfx_planned=0,sfx_mixed=0,sfx_rejected=0,
