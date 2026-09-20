@@ -37,7 +37,7 @@ class SfxEditorPanel(QWidget):
 
         controls = QHBoxLayout()
         self.enabled = QCheckBox("Dùng cue này")
-        self.enabled.setChecked(event.caption_index not in self.disabled_captions)
+        self.enabled.setChecked(True)
         self.kind = QComboBox()
         for key, label in KIND_LABELS.items():
             self.kind.addItem(label, key)
