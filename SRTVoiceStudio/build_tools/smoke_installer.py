@@ -19,7 +19,8 @@ with baseline.open('rb') as stream:
     assert hashlib.file_digest(stream,'sha256').hexdigest()==expected,'Baseline installer checksum mismatch'
 appkey=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
 appdata=Path(os.environ['LOCALAPPDATA'])/'SRTVoiceStudio'
-results={'version':'1.4.0','baseline_sha256':expected,'scenarios':{}}
+target_version='1.7.0'
+results={'version':target_version,'baseline_sha256':expected,'scenarios':{}}
 
 def registry():
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER,appkey,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:
@@ -33,7 +34,7 @@ def install(file,dest=None):
 def read_report(name):
     data=json.loads((appdata/name).read_text('utf-8'))
     assert data.get('passed') is True,data
-    assert data.get('version')=='1.4.0',data
+    assert data.get('version')==target_version,data
     return data
 
 for scenario in ('upgrade','clean'):
@@ -50,7 +51,7 @@ for scenario in ('upgrade','clean'):
             assert json.loads(preferences.read_text())['favorite_voices']==['am_michael','bf_emma']
         else:install(installer)
         state=registry()
-        assert state['DisplayVersion']=='1.4.0' and state['DisplayName']=='SRT Voice Studio',state
+        assert state['DisplayVersion']==target_version and state['DisplayName']=='SRT Voice Studio',state
         assert Path(state['InstallLocation']).resolve()==dest.resolve(),state
         assert exe.exists() and len(list(dest.glob('unins*.exe')))==1
         env=os.environ.copy();env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')
