@@ -98,3 +98,21 @@ def test_17_visual_qc_dashboard_and_caption_retry_success_path(app, tmp_path, mo
         assert "Đã tạo lại TTS câu 1" in w.status.text()
     finally:
         w.close()
+
+
+def test_smart_fit3_tab_and_apply_button_enable_neighbor_smoothing(app, tmp_path, monkeypatch):
+    w = _window(app, tmp_path, monkeypatch)
+    try:
+        idx = w.tabs.indexOf(w.timeline_inspector)
+        assert idx >= 0
+        assert w.tabs.tabText(idx) == "Smart Fit 3.0"
+        assert w.timeline_inspector.optimize.text() == "Áp dụng Smart Fit 3.0"
+        w.smart_fit3.setChecked(False)
+        w.timeline_inspector.optimize.click()
+        assert w.smart_fit3.isChecked()
+        assert w.adaptive.isChecked()
+        assert w.gap.currentData() == 100
+        assert w.continuous_voice.isChecked()
+        assert "Smart Fit 3.0" in w.status.text()
+    finally:
+        w.close()
