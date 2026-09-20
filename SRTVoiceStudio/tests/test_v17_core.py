@@ -49,6 +49,8 @@ def test_quality_control_reports_trim_sfx_and_clipping():
     assert report["status"] == "FAIL"
     codes = {x["code"] for x in report["issues"]}
     assert {"CLIPPING", "TRIMMED_CAPTIONS", "SFX_REJECTED"} <= codes
+    trimmed_issue = next(x for x in report["issues"] if x["code"] == "TRIMMED_CAPTIONS")
+    assert isinstance(trimmed_issue.get("captions", []), list)
 
 
 def test_smart_fit3_smooths_only_when_slot_stays_safe():
