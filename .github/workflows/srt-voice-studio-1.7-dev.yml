@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: srt-voice-studio-1.7-dev-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   qa:
     runs-on: windows-2022
