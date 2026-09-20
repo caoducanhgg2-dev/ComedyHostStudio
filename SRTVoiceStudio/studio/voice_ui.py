@@ -5,7 +5,7 @@ from . import preferences
 from . import ui_text as vi
 from .backend import PREVIEW
 from .ratings import score,read_csv
-from .voice_catalog import catalog_voices
+from .voice_catalog import catalog_voices,capcut_reference_voices,is_capcut_reference,CAPCUT_NOTICE
 
 
 class VoicePanel(QWidget):
@@ -22,9 +22,9 @@ class VoicePanel(QWidget):
         saved=preferences.read().get('favorite_voices',[])
         self.favorites=set(x for x in saved if isinstance(x,str)) if isinstance(saved,list) else set()
         layout=QVBoxLayout(self)
-        layout.addWidget(QLabel('THƯ VIỆN GIỌNG 1.7.1 • Nhật Aivis + Việt Korva • model tùy chọn tải riêng'))
+        layout.addWidget(QLabel('THƯ VIỆN GIỌNG 1.8.0 • Local TTS + CapCut tham khảo theo thị trường'))
         self.filter=QComboBox()
-        for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Tiếng Anh','en'),('Tiếng Nhật','ja'),('Tiếng Việt','vi'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
+        for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Mỹ / English US','us'),('Anh / English UK','uk'),('Nhật Bản','ja'),('Việt Nam','vi'),('CapCut','capcut'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
         self.filter.setCurrentIndex(1);layout.addWidget(self.filter)
         self.list=QListWidget();layout.addWidget(self.list,2)
         self.details=QTextBrowser();self.details.setOpenExternalLinks(True);layout.addWidget(self.details,1)
@@ -130,6 +130,7 @@ class VoicePanel(QWidget):
         # are only added when the corresponding optional voice is not installed.
         self.voices=dict(installed)
         for voice in catalog_voices():self.voices.setdefault(voice.id,voice)
+        for voice in capcut_reference_voices():self.voices.setdefault(voice.id,voice)
         saved=preferences.read().get('voice_ratings',{});self.ratings=saved if isinstance(saved,dict) else {}
         mode=self.filter.currentData();self.list.clear()
         for voice in self.voices.values():
@@ -137,26 +138,33 @@ class VoicePanel(QWidget):
             rating=score(self.ratings.get(voice.id))
             if mode=='recommended' and (not is_installed or rating is None or rating<8):continue
             if mode=='installed' and not is_installed:continue
-            if mode=='en' and voice.language not in ('English US','English UK'):continue
+            if mode=='us' and voice.language!='English US':continue
+            if mode=='uk' and voice.language!='English UK':continue
             if mode=='ja' and voice.language!='Japanese':continue
             if mode=='vi' and voice.language!='Vietnamese':continue
+            if mode=='capcut' and not is_capcut_reference(voice):continue
             if mode=='favorites' and voice.id not in self.favorites:continue
             label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
             assessment='Chưa chấm' if rating is None else f'{rating:.2f}/10 · Điểm nghe do người dùng cung cấp'
-            state='Đã cài • dùng offline' if is_installed else f'Chưa cài • cần gói {voice.engine}'
+            if is_capcut_reference(voice):state='CapCut tham khảo • dùng trong CapCut • không render trực tiếp'
+            else:state='Đã cài • dùng offline' if is_installed else f'Chưa cài • cần gói {voice.engine}'
             item=QListWidgetItem(f"{'★ ' if voice.id in self.favorites else ''}{label}  ·  {vi.display(voice.language)}  ·  {voice.engine}\n{state} • {assessment}")
             item.setData(Qt.UserRole,voice.id);self.list.addItem(item)
             if voice.id==previous:self.list.setCurrentItem(item)
         if self.list.count() and self.list.currentRow()<0:self.list.setCurrentRow(0)
         if mode=='recommended' and not self.list.count():
             text='Chưa có giọng đủ kết quả nghe kiểm chứng để gắn nhãn Đề xuất.'
-        elif mode in ('ja','vi'):
-            language='Japanese' if mode=='ja' else 'Vietnamese'
-            label='Nhật' if mode=='ja' else 'Việt'
+        elif mode in ('us','uk','ja','vi'):
+            language={'us':'English US','uk':'English UK','ja':'Japanese','vi':'Vietnamese'}[mode]
+            label={'us':'Mỹ','uk':'Anh','ja':'Nhật','vi':'Việt'}[mode]
             installed_count=sum(1 for v in self.voices.values()
                                 if v.language==language and v.id in self.installed_ids)
             total_count=sum(1 for v in self.voices.values() if v.language==language)
-            text=f'{total_count} giọng {label} • {installed_count} đã cài • {total_count-installed_count} chờ tải model.'
+            reference_count=sum(1 for v in self.voices.values() if v.language==language and is_capcut_reference(v))
+            local_pending=max(0,total_count-installed_count-reference_count)
+            text=f'{total_count} giọng {label} • {installed_count} đã cài • {local_pending} chờ model • {reference_count} CapCut tham khảo.'
+        elif mode=='capcut':
+            text=f'{self.list.count()} profile CapCut • phân theo thị trường • availability tùy tài khoản/khu vực/phiên bản.'
         else:
             text=f'{self.list.count()} giọng • Chú thích đặc tính chỉ để chọn nhanh; không phải điểm chất lượng.'
         self.status.setText(text);self.selection()
@@ -164,8 +172,10 @@ class VoicePanel(QWidget):
     def selection(self,*_):
         import html
         voice=self.selected();is_installed=bool(voice and voice.id in self.installed_ids)
-        self.use.setEnabled(bool(voice) and is_installed and not self.window.busy());self.favorite.setEnabled(bool(voice))
-        self.use.setText('Dùng giọng này' if is_installed else
+        reference=bool(voice and is_capcut_reference(voice))
+        self.use.setEnabled(bool(voice) and is_installed and not reference and not self.window.busy());self.favorite.setEnabled(bool(voice))
+        self.use.setText('Dùng giọng này' if is_installed and not reference else
+                         'Dùng tên này trong CapCut' if reference else
                          f'Chưa cài • cần gói {voice.engine}' if voice else 'Chưa cài')
         if not voice:self.details.clear();return
         esc=html.escape;rating=score(self.ratings.get(voice.id))
@@ -174,10 +184,12 @@ class VoicePanel(QWidget):
             record=self.ratings[voice.id];assessment=f'Điểm nghe do người dùng cung cấp: {rating:.2f}/10. Người chấm: {esc(record["reviewer"])}. {esc(record.get("notes", ""))}'
         self.favorite.setText('★ Bỏ yêu thích' if voice.id in self.favorites else '☆ Thêm yêu thích')
         label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
-        state='Đã cài • sẵn sàng dùng offline' if is_installed else f'Chưa cài • cần tải gói {voice.engine}'
+        state=('CapCut tham khảo • tìm/chọn trong CapCut; không render trực tiếp bằng SRT Voice Studio' if reference else
+               'Đã cài • sẵn sàng dùng offline' if is_installed else f'Chưa cài • cần tải gói {voice.engine}')
         trait=vi.voice_characteristic(voice.id)
         trait_line=f'<br>Chú thích: {esc(trait)}' if trait else ''
-        self.details.setHtml(f'<b>{esc(label)}</b><p>Trạng thái: {esc(state)}<br>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}{trait_line}<br>Giấy phép: {esc(voice.license)}</p>'
+        reference_line=f'<br><b>Lưu ý CapCut:</b> {esc(CAPCUT_NOTICE)}' if reference else ''
+        self.details.setHtml(f'<b>{esc(label)}</b><p>Trạng thái: {esc(state)}<br>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}{trait_line}{reference_line}<br>Giấy phép / điều khoản: {esc(voice.license)}</p>'
             f'<p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p><p>{assessment}</p>')
 
     def load_ratings(self):
