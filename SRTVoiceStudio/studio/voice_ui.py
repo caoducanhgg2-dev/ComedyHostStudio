@@ -24,7 +24,7 @@ class VoicePanel(QWidget):
         layout=QVBoxLayout(self)
         layout.addWidget(QLabel('THƯ VIỆN GIỌNG • Giọng Aivis chưa tải vẫn hiện trong dropdown Tiếng Nhật và trong thư viện'))
         self.filter=QComboBox()
-        for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Tiếng Anh','en'),('Tiếng Nhật','ja'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
+        for title,value in [('Đề xuất','recommended'),('Đã cài','installed'),('Tiếng Anh','en'),('Tiếng Nhật','ja'),('Tiếng Việt','vi'),('Tất cả','all'),('Yêu thích','favorites')]:self.filter.addItem(title,value)
         self.filter.setCurrentIndex(1);layout.addWidget(self.filter)
         self.list=QListWidget();layout.addWidget(self.list,2)
         self.details=QTextBrowser();self.details.setOpenExternalLinks(True);layout.addWidget(self.details,1)
@@ -55,32 +55,34 @@ class VoicePanel(QWidget):
         installed_list=[v for v in w.backend.list_voices() if v.language==language]
         installed={v.id:v for v in installed_list}
         choices=list(installed_list)
-        if language=='Japanese':
-            for voice in catalog_voices():
-                if voice.id not in installed:choices.append(voice)
+        for voice in catalog_voices(language):
+            if voice.id not in installed:choices.append(voice)
         old=w.voice.blockSignals(True)
         w.voice.clear()
         for voice in choices:
             is_installed=voice.id in installed
-            if voice.engine=='Kokoro':label=vi.voice_label(voice.id)
-            elif is_installed:label=voice.name+'  ·  Aivis'
-            else:label=voice.name+'  ·  [Aivis • Chưa cài]'
+            if voice.engine=='Kokoro':
+                label=vi.voice_label(voice.id)
+            elif is_installed:
+                label=voice.name+f'  ·  {voice.engine}'
+            else:
+                label=voice.name+f'  ·  [{voice.engine} • Chưa cài]'
             w.voice.addItem(label,voice.id)
             index=w.voice.count()-1
             w.voice.setItemData(index,
-                'Sẵn sàng dùng offline' if is_installed else 'Chưa cài model • Mở tab Thư viện giọng để tải Aivis Nhật',
+                'Sẵn sàng dùng offline' if is_installed else
+                f'Chưa cài model {voice.engine} • Mở tab Thư viện giọng để cài gói phù hợp',
                 Qt.ToolTipRole)
             if not is_installed:
                 item=w.voice.model().item(index)
                 if item is not None:item.setEnabled(False)
         w.voice.blockSignals(old)
-        if language=='Japanese':
-            missing=max(0,len(choices)-len(installed_list))
-            if missing:
-                w.voice_count.setText(f'{len(choices)} giọng · {len(installed_list)} đã cài · {missing} Aivis chưa cài')
-            else:
-                w.voice_count.setText(f'{len(choices)} giọng · Aivis đã cài đầy đủ · Chạy trên CPU')
-        else:w.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
+        missing=max(0,len(choices)-len(installed_list))
+        if missing:
+            w.voice_count.setText(
+                f'{len(choices)} giọng · {len(installed_list)} đã cài · {missing} chưa cài')
+        else:
+            w.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
         if w.caption_select.currentData() is None:w.preview_text.setText(PREVIEW[language])
         w.voice_changed();w.invalidate_base()
 
@@ -116,20 +118,24 @@ class VoicePanel(QWidget):
             if mode=='installed' and not is_installed:continue
             if mode=='en' and voice.language not in ('English US','English UK'):continue
             if mode=='ja' and voice.language!='Japanese':continue
+            if mode=='vi' and voice.language!='Vietnamese':continue
             if mode=='favorites' and voice.id not in self.favorites:continue
             label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
             assessment='Chưa chấm' if rating is None else f'{rating:.2f}/10 · Điểm nghe do người dùng cung cấp'
-            state='Đã cài • dùng offline' if is_installed else 'Chưa cài • tải gói Aivis Nhật để dùng'
+            state='Đã cài • dùng offline' if is_installed else f'Chưa cài • cần gói {voice.engine}'
             item=QListWidgetItem(f"{'★ ' if voice.id in self.favorites else ''}{label}  ·  {vi.display(voice.language)}  ·  {voice.engine}\n{state} • {assessment}")
             item.setData(Qt.UserRole,voice.id);self.list.addItem(item)
             if voice.id==previous:self.list.setCurrentItem(item)
         if self.list.count() and self.list.currentRow()<0:self.list.setCurrentRow(0)
         if mode=='recommended' and not self.list.count():
             text='Chưa có giọng đủ kết quả nghe kiểm chứng để gắn nhãn Đề xuất.'
-        elif mode=='ja':
-            installed_ja=sum(1 for v in self.voices.values() if v.language=='Japanese' and v.id in self.installed_ids)
-            total_ja=sum(1 for v in self.voices.values() if v.language=='Japanese')
-            text=f'{total_ja} giọng Nhật trong bản 1.4.2 • {installed_ja} đã cài • {total_ja-installed_ja} chờ tải model.'
+        elif mode in ('ja','vi'):
+            language='Japanese' if mode=='ja' else 'Vietnamese'
+            label='Nhật' if mode=='ja' else 'Việt'
+            installed_count=sum(1 for v in self.voices.values()
+                                if v.language==language and v.id in self.installed_ids)
+            total_count=sum(1 for v in self.voices.values() if v.language==language)
+            text=f'{total_count} giọng {label} • {installed_count} đã cài • {total_count-installed_count} chờ tải model.'
         else:
             text=f'{self.list.count()} giọng • Chú thích đặc tính chỉ để chọn nhanh; không phải điểm chất lượng.'
         self.status.setText(text);self.selection()
@@ -138,7 +144,8 @@ class VoicePanel(QWidget):
         import html
         voice=self.selected();is_installed=bool(voice and voice.id in self.installed_ids)
         self.use.setEnabled(bool(voice) and is_installed and not self.window.busy());self.favorite.setEnabled(bool(voice))
-        self.use.setText('Dùng giọng này' if is_installed else 'Chưa cài • tải Aivis để dùng')
+        self.use.setText('Dùng giọng này' if is_installed else
+                         f'Chưa cài • cần gói {voice.engine}' if voice else 'Chưa cài')
         if not voice:self.details.clear();return
         esc=html.escape;rating=score(self.ratings.get(voice.id))
         assessment='Điểm tự nhiên, phát âm và biểu cảm: chưa được nghe chấm. Chú thích đặc tính chỉ là mô tả tham khảo, không thay cho điểm chất lượng.'
@@ -146,7 +153,7 @@ class VoicePanel(QWidget):
             record=self.ratings[voice.id];assessment=f'Điểm nghe do người dùng cung cấp: {rating:.2f}/10. Người chấm: {esc(record["reviewer"])}. {esc(record.get("notes", ""))}'
         self.favorite.setText('★ Bỏ yêu thích' if voice.id in self.favorites else '☆ Thêm yêu thích')
         label=vi.voice_label(voice.id) if voice.engine=='Kokoro' else voice.name
-        state='Đã cài • sẵn sàng dùng offline' if is_installed else 'Chưa cài • cần tải gói Aivis Nhật một lần'
+        state='Đã cài • sẵn sàng dùng offline' if is_installed else f'Chưa cài • cần tải gói {voice.engine}'
         trait=vi.voice_characteristic(voice.id)
         trait_line=f'<br>Chú thích: {esc(trait)}' if trait else ''
         self.details.setHtml(f'<b>{esc(label)}</b><p>Trạng thái: {esc(state)}<br>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}{trait_line}<br>Giấy phép: {esc(voice.license)}</p>'
