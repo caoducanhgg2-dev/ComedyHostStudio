@@ -13,7 +13,7 @@ from .continuity import trim_edge_silence
 from .voice_backends import synthesize_selected
 from .sfx import mix_auto_sfx, DENSITIES, STRENGTHS
 from .render_cache import TtsCache
-from .quality import measure_master, analyze_render
+from .quality import measure_master, measure_encoded_mp3, analyze_render
 
 @dataclass(frozen=True)
 class Settings:
@@ -179,7 +179,7 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         summary['quality_status'] = summary['quality']['status']
         summary['quality_issues'] = summary['quality']['issues']
         progress(len(slots), len(slots),
-                 f"TIMELINE VALID • QC {summary['quality_status']} • SFX {summary['sfx_mixed']}/{summary['sfx_planned']} • Đang mã hóa MP3")
+                 f"TIMELINE VALID • PRE-QC {summary['quality_status']} • SFX {summary['sfx_mixed']}/{summary['sfx_planned']} • Đang mã hóa MP3")
         # Stage in the destination filesystem so publishing is atomic on any drive.
         # Register this path for recovery after a process crash.
         fd, staged = tempfile.mkstemp(prefix='.srtvs-', suffix='.mp3', dir=output.parent)
@@ -188,6 +188,12 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
         try:
             encode(master_path, staged, cancel)
             check_cancel(cancel)
+            summary['encoded_metrics'] = measure_encoded_mp3(staged, temp, cancel)
+            summary['quality'] = analyze_render(summary)
+            summary['quality_status'] = summary['quality']['status']
+            summary['quality_issues'] = summary['quality']['issues']
+            progress(len(slots), len(slots),
+                     f"QC {summary['quality_status']} • MP3 cuối đã được decode kiểm tra")
             os.replace(staged, output)
         finally:
             Path(staged).unlink(missing_ok=True)
