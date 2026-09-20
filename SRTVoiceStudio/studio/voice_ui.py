@@ -65,12 +65,17 @@ class VoicePanel(QWidget):
         choices=list(installed_list)
         for voice in catalog_voices(language):
             if voice.id not in installed:choices.append(voice)
+        for voice in capcut_reference_voices(language):
+            if voice.id not in installed:choices.append(voice)
         old=w.voice.blockSignals(True)
         w.voice.clear()
         for voice in choices:
             is_installed=voice.id in installed
+            reference=is_capcut_reference(voice)
             if voice.engine=='Kokoro':
                 label=vi.voice_label(voice.id)
+            elif reference:
+                label=voice.name+'  ·  [CapCut • tham khảo]'
             elif is_installed:
                 label=voice.name+f'  ·  {voice.engine}'
             else:
@@ -79,6 +84,8 @@ class VoicePanel(QWidget):
             index=w.voice.count()-1
             w.voice.setItemData(index,
                 'Sẵn sàng dùng offline' if is_installed else
+                'Profile tham khảo • tìm/chọn giọng tương ứng trong CapCut • không render trực tiếp'
+                if reference else
                 f'Chưa cài model {voice.engine} • Mở tab Thư viện giọng để cài gói phù hợp',
                 Qt.ToolTipRole)
             if not is_installed:
@@ -87,10 +94,11 @@ class VoicePanel(QWidget):
         if not installed_list:
             w.voice.setCurrentIndex(-1)
         w.voice.blockSignals(old)
-        missing=max(0,len(choices)-len(installed_list))
-        if missing:
+        reference_count=sum(1 for voice in choices if is_capcut_reference(voice))
+        model_missing=max(0,len(choices)-len(installed_list)-reference_count)
+        if model_missing or reference_count:
             w.voice_count.setText(
-                f'{len(choices)} giọng · {len(installed_list)} đã cài · {missing} chưa cài')
+                f'{len(choices)} mục · {len(installed_list)} đã cài · {model_missing} chờ model · {reference_count} CapCut')
         else:
             w.voice_count.setText(f'{len(choices)} giọng · Chạy trên CPU')
         if w.caption_select.currentData() is None:w.preview_text.setText(PREVIEW[language])
