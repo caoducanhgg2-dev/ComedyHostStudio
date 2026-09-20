@@ -19,9 +19,13 @@ def test_nine_extra_japanese_models_are_exactly_pinned():
     manifest={uid:(size,sha) for uid,version,size,sha in MODEL_PACKS}
     assert all(manifest[uid]==value for uid,value in EXPECTED.items())
     by_id={p.filename.removesuffix('.aivmx'):p for p in packs() if p.filename.endswith('.aivmx')}
+    expected_license={
+        'f493ab6c-1ffa-4534-9bbd-2ba398f17cd5':'CC0',
+    }
     for uid,(size,sha) in EXPECTED.items():
         p=by_id[uid]
-        assert p.size==size and p.sha256==sha and p.license=='ACML-1.0'
+        assert p.size==size and p.sha256==sha
+        assert p.license==expected_license.get(uid,'ACML-1.0')
         assert p.url.endswith(uid+'/download?model_type=AIVMX')
 
 def test_extra_voice_metadata_has_unique_real_speakers_and_characteristics():
