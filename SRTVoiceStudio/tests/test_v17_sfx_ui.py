@@ -34,12 +34,14 @@ def test_sfx_editor_is_per_file_and_disabled_cue_stays_reversible(app, tmp_path,
         w.sfx_editor_panel.refresh()
         assert w.sfx_editor_panel.table.rowCount() >= 1
 
+        first_item = w.multi_file_panel.queue.items[0]
+        second_item = w.multi_file_panel.queue.items[1]
+        from studio.batch import DONE, WAITING
+        first_item.state = DONE
         w.sfx_editor_panel.table.selectRow(0)
         w.sfx_editor_panel.enabled.setChecked(False)
         w.sfx_editor_panel.apply_selected()
-
-        first_item = w.multi_file_panel.queue.items[0]
-        second_item = w.multi_file_panel.queue.items[1]
+        assert first_item.state == WAITING
         assert len(first_item.sfx_overrides) == 1
         assert first_item.sfx_overrides[0]["enabled"] is False
         assert second_item.sfx_overrides == ()
