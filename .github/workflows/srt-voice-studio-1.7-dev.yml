@@ -1,0 +1,104 @@
+name: Test SRT Voice Studio 1.7 Production Workspace
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.7.0-production-workspace']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.7-dev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Checkout 1.7 source
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+
+      - name: Full source regression suite
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-1.7.xml
+
+      - name: 1.7 core gates
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_v17_core.py tests/test_v17_ui.py
+
+      - name: Preserve 1.6.1 multifile and SFX regressions
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_multifile_161.py tests/test_sfx_161.py
+
+      - name: Cache stress and QC sanity
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          @'
+          import tempfile
+          from types import SimpleNamespace
+          import numpy as np
+          from studio.render_cache import TtsCache
+          from studio.quality import measure_master, analyze_render
+          s=SimpleNamespace(language='Japanese',voice='jf_alpha',native_style=None)
+          with tempfile.TemporaryDirectory() as d:
+              c=TtsCache(d)
+              for i in range(120):
+                  x=(.04*np.sin(np.linspace(0,30,4800+i))).astype(np.float32)
+                  assert c.put(s,f'caption-{i}',x,48000)
+                  y,r=c.get(s,f'caption-{i}')
+                  assert r==48000 and np.allclose(x,y)
+          master=np.zeros(48000,dtype=np.float32)
+          master[1000:2000]=.2
+          q=analyze_render(dict(overlaps=0,safely_trimmed=0,
+              underfilled_after_hard_minimum=0,transitions_over_08=0,
+              auto_sfx=False,sfx_planned=0,sfx_mixed=0,sfx_rejected=0,
+              master_metrics=measure_master(master)))
+          assert q['status']=='PASS',q
+          print({'cache_roundtrips':120,'qc':q['status']})
+          '@ | python -
+
+      - name: Build frozen 1.7 app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+
+      - name: Test frozen app
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+
+      - name: Frozen SFX safety self-test
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path '.\dist\SRTVoiceStudio\SRTVoiceStudio.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--sfx-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Frozen SFX self-test exited with $($p.ExitCode)" }
+          Write-Host 'Frozen SFX 1.7 self-test: PASS'
+
+      - name: Upload 1.7 QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.7_QA
+          path: SRTVoiceStudio/test-results-1.7.xml
+          retention-days: 30
