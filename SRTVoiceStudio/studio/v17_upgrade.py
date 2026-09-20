@@ -49,6 +49,29 @@ def _install_17_settings(window):
     window.settings = MethodType(settings_17, window)
     window.edit_controls.extend([window.smart_fit3, window.render_cache_enabled])
 
+    inspector = getattr(window, "timeline_inspector", None)
+    if inspector is not None:
+        index = window.tabs.indexOf(inspector)
+        if index >= 0:
+            window.tabs.setTabText(index, "Smart Fit 3.0")
+        inspector.optimize.setText("Áp dụng Smart Fit 3.0")
+        inspector.note.setText(
+            "Preflight vẫn ước tính nhanh theo mật độ chữ. Khi render, Smart Fit 3.0 "
+            "dùng thời lượng TTS thật và làm mượt bước nhảy tốc độ giữa caption liền nhau "
+            "nếu việc làm mượt không tạo overflow.")
+        try:
+            inspector.optimize.clicked.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        base_apply_safe = inspector.apply_safe
+        def apply_fit3():
+            base_apply_safe()
+            window.smart_fit3.setChecked(True)
+            window.status.setText(
+                "Đã áp dụng Smart Fit 3.0: adaptive + gap 0.10s + Continuous Voice "
+                "+ làm mượt tốc độ giữa caption.")
+        inspector.optimize.clicked.connect(apply_fit3)
+
 
 def _install_workspace_controls(window):
     panel = window.multi_file_panel
