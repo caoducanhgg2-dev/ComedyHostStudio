@@ -32,6 +32,8 @@ def test_17_workspace_exposes_shared_smartfit_cache_and_multiselect(app, tmp_pat
         assert settings.use_render_cache is True
         assert w.multi_file_panel.table.selectionMode() == QAbstractItemView.ExtendedSelection
         assert w.multi_file_panel.select_all_button.text() == "Chọn tất cả"
+        assert w.multi_file_panel.table.columnCount() == 7
+        assert w.multi_file_panel.table.horizontalHeaderItem(6).text() == "QC"
         assert "TTS" in w.multi_file_panel.retry_caption_button.text()
         assert w.clear_cache_button.text() == "Xóa Cache TTS"
         assert w.cache_status.text().startswith("Cache:")
