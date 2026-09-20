@@ -224,3 +224,26 @@ def test_render_cache_is_used_on_second_render_without_recalling_tts(tmp_path, m
     assert calls["tts"] == 1
     assert first["cache_hits"] == 0 and first["cache_misses"] == 1
     assert second["cache_hits"] == 1 and second["cache_misses"] == 0
+
+
+def test_effect_processor_retries_nonfinite_pcm_then_returns_clean_audio(tmp_path, monkeypatch):
+    import threading
+    import studio.effects as effects
+
+    calls = {"n": 0}
+    def fake_run(args, cancel, cwd=None):
+        calls["n"] += 1
+        target = Path(args[-1])
+        if calls["n"] == 1:
+            np.asarray([0.0, np.nan, 0.0], dtype="<f4").tofile(target)
+        else:
+            np.linspace(-.1, .1, 256, dtype="<f4").tofile(target)
+        return ""
+
+    monkeypatch.setattr(effects, "run", fake_run)
+    processor = effects.EffectProcessor(tmp_path, threading.Event())
+    source = np.linspace(-.05, .05, 128, dtype=np.float32)
+    result = processor._process(source, 24000, ["anull"])
+    assert calls["n"] == 2
+    assert len(result) == 256
+    assert np.isfinite(result).all()
