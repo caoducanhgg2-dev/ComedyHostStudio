@@ -1,0 +1,151 @@
+name: Publish SRT Voice Studio 1.7.2
+
+on:
+  push:
+    branches: ['release/srt-voice-studio-1.7.2']
+    paths:
+      - '.github/workflows/publish-srt-voice-studio-1.7.2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download accepted 1.7.2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.7.1_to_1.7.2
+          run-id: 35525345107
+          github-token: ${{ github.token }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          path: accepted
+
+      - name: Validate accepted payload and create release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find accepted -type f -name 'SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip' -print -quit)"
+          EVIDENCE="$(find accepted -type f -name 'final-acceptance-1.7.2.json' -print -quit)"
+          MANIFEST="$(find accepted -type f -name 'update_manifest.json' -print -quit)"
+          test -n "$ZIP" && test -f "$ZIP"
+          test -n "$EVIDENCE" && test -f "$EVIDENCE"
+          test -n "$MANIFEST" && test -f "$MANIFEST"
+
+          python - "$EVIDENCE" "$MANIFEST" <<'PY'
+          import hashlib,json,sys
+          evidence=json.load(open(sys.argv[1],encoding='utf-8'))
+          manifest=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert evidence['version']=='1.7.2'
+          assert evidence['from_version']=='1.7.1'
+          assert evidence['korva_sha_hotfix'] is True
+          assert evidence['korva_real_download_sha_passed'] is True
+          assert evidence['exact_final_tree'] is True
+          assert evidence['rollback_passed'] is True
+          assert evidence['corruption_guard_passed'] is True
+          assert evidence['reapply_passed'] is True
+          assert manifest['from_version']=='1.7.1'
+          assert manifest['to_version']=='1.7.2'
+          expected='73F83E307D7934C649CDB654CB0742326EFD91067ABAFC6C84A19A1F0902AA26'
+          with open('accepted/SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip','rb') as f:
+              actual=hashlib.sha256(f.read()).hexdigest().upper()
+          assert actual==expected,(actual,expected)
+          print('Accepted 1.7.2 evidence: PASS')
+          PY
+
+          mkdir -p release-files
+          cp "$ZIP" release-files/
+          cp "$EVIDENCE" release-files/
+          cp "$MANIFEST" release-files/
+          (cd release-files && sha256sum SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip final-acceptance-1.7.2.json update_manifest.json > SHA256SUMS_RELEASE.txt)
+
+          cat > release-files/HUONG_DAN_SRTVoiceStudio_1.7.2.txt <<'EOF'
+          SRT Voice Studio 1.7.2 - Korva SHA Fix
+
+          Day la goi cap nhat nho tu SRT Voice Studio 1.7.1 len 1.7.2.
+          KHONG can cai lai toan bo ung dung.
+
+          Cach cap nhat:
+          1. Dong SRT Voice Studio.
+          2. Giai nen SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip.
+          3. Chay Apply_Update.cmd.
+          4. Mo lai app va thu lai nut Tai Korva Viet.
+          5. Neu can quay lai 1.7.1, chay Rollback_Update.cmd.
+
+          Sua loi chinh:
+          - Sua checksum SHA-256 cua 4 file ONNX KorvaTTS.
+          - Khong dung Xet hash cua Hugging Face thay cho file SHA-256.
+          - Giu nguyen co che kiem tra SHA-256 an toan.
+          - Them gate tai that duration_predictor.onnx tu revision da ghim de xac minh checksum.
+          - Giu nguyen 10 giong Viet Korva, 11 giong Nhat Aivis, Adaptive Timeline, Continuous Voice, Auto SFX va multi-file.
+
+          Da kiem tra:
+          - Korva real-download SHA: PASS.
+          - Exact final tree: PASS.
+          - Rollback: PASS.
+          - Corruption guard: PASS.
+          - Reapply: PASS.
+
+          Baseline bat buoc: SRT Voice Studio 1.7.1.
+          EOF
+
+          cat > release-notes.md <<'EOF'
+          ## SRT Voice Studio 1.7.2 — Korva SHA Fix
+
+          Bản hotfix dạng **ZIP patch từ 1.7.1 → 1.7.2**. Không cần cài lại toàn bộ ứng dụng.
+
+          ### Sửa lỗi tiếng Việt KorvaTTS
+          - Sửa checksum SHA-256 của 4 model ONNX KorvaTTS.
+          - Nguyên nhân: 1.7.1 đã dùng nhầm Hugging Face Xet hash như file SHA-256.
+          - Vẫn giữ nguyên kiểm tra SHA-256; không nới lỏng hoặc tắt kiểm tra an toàn.
+          - Thêm kiểm thử tải thật file duration_predictor.onnx từ revision đã ghim để xác nhận checksum.
+
+          ### Không thay đổi workflow hiện có
+          - 10 giọng Việt Korva.
+          - 11 giọng Nhật Aivis.
+          - Adaptive Timeline.
+          - Continuous Voice.
+          - Auto SFX.
+          - Multi-file workflow.
+
+          ### Acceptance
+          - Korva real-download SHA: PASS.
+          - Full regression: PASS.
+          - Frozen app: PASS.
+          - Exact final tree: PASS.
+          - Rollback: PASS.
+          - Corruption guard: PASS.
+          - Reapply: PASS.
+          - Delta: **7 file thay đổi**, payload ratio khoảng **1.0123%**.
+
+          SHA-256:
+          73F83E307D7934C649CDB654CB0742326EFD91067ABAFC6C84A19A1F0902AA26
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='srt-voice-studio-v1.7.2'
+          TARGET='79d59d297fe0731cdfd71c99011c8128409a0f44'
+          TITLE='SRT Voice Studio 1.7.2 - Korva SHA Fix'
+          ASSETS=(
+            release-files/SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip
+            release-files/final-acceptance-1.7.2.json
+            release-files/update_manifest.json
+            release-files/SHA256SUMS_RELEASE.txt
+            release-files/HUONG_DAN_SRTVoiceStudio_1.7.2.txt
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --target "$TARGET" --title "$TITLE" --notes-file release-notes.md --latest
+          fi
