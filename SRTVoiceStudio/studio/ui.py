@@ -41,7 +41,7 @@ class Worker(QThread):
             elif self.task == 'batch':
                 params = dict(self.params); queue = params.pop('queue')
                 result = queue.run(self.backend, **params, update=lambda _: self.queue_update.emit())
-            elif self.task == 'install_aivis':
+            elif self.task in ('install_aivis','install_korva'):
                 result=self.params['pack'].install(self.cancel,self.progress.emit)
             elif self.task == 'preview':
                 result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
@@ -84,11 +84,14 @@ class Window(QMainWindow):
         self.setAcceptDrops(True)
         self.backend = BackendRouter()
         from .aivis_pack import AivisPack
-        self.aivis_pack=AivisPack()
-        try:
-            optional=self.aivis_pack.backend()
-            if optional:self.backend.register(optional)
-        except (OSError,ValueError,KeyError):logging.exception('Cannot load optional voice pack metadata')
+        from .korva_pack import KorvaPack
+        self.aivis_pack=AivisPack();self.korva_pack=KorvaPack()
+        for pack_name,pack in (('Aivis',self.aivis_pack),('Korva',self.korva_pack)):
+            try:
+                optional=pack.backend()
+                if optional:self.backend.register(optional)
+            except (OSError,ValueError,KeyError):
+                logging.exception('Cannot load optional %s voice pack metadata',pack_name)
         self.worker = None
         self.output = None
         self.preview_temp = None  # Compatibility: previews now use memory only.
@@ -357,6 +360,7 @@ class Window(QMainWindow):
         self.worker = Worker(self.backend, task, params, self.preview_cache)
         self.batch_panel.set_busy(True)
         self.voice_panel.install.setEnabled(False)
+        self.voice_panel.install_korva.setEnabled(False)
         self.worker.queue_update.connect(self.batch_panel.refresh)
         self.worker.progress.connect(self.progress)
         self.worker.success.connect(lambda result: self.success(task, result))
@@ -516,13 +520,18 @@ class Window(QMainWindow):
 
     def success(self, task, result):
         self.bar.setValue(100)
-        if task == 'install_aivis':
-            optional=self.aivis_pack.backend()
+        if task in ('install_aivis','install_korva'):
+            pack=self.aivis_pack if task=='install_aivis' else self.korva_pack
+            optional=pack.backend()
             if optional:self.backend.register(optional)
             previous=self.voice.currentData();self.language_changed()
             index=self.voice.findData(previous)
             if index>=0:self.voice.setCurrentIndex(index)
-            self.voice_panel.refresh();self.status.setText('Đã cài gói Aivis. Giọng mới nằm trong Tiếng Nhật; chưa có điểm nghe xác nhận.')
+            self.voice_panel.refresh();self.voice_panel.refresh_install()
+            if task=='install_aivis':
+                self.status.setText('Đã cài/cập nhật Aivis Nhật. Giọng mới đã sẵn sàng offline.')
+            else:
+                self.status.setText('Đã cài Korva Việt. 10 giọng tiếng Việt đã sẵn sàng offline.')
         elif task == 'preview':
             self.preview_device=QBuffer(self)
             self.preview_device.setData(QByteArray(wav_bytes(result.samples,result.rate)))
