@@ -1,0 +1,91 @@
+name: Test SRT Voice Studio 1.7.2 Korva Hash Hotfix
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.7.2-korva-hash-hotfix']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.7.2-dev.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: srt-voice-studio-1.7.2-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    runs-on: windows-2022
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          python -m pip check
+
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+
+      - name: Full regression suite
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-1.7.2.xml
+
+      - name: Korva SHA hotfix gate
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_korva_pack_171.py tests/test_voice_expansion_171.py tests/test_voice_backends.py
+
+      - name: Verify real Korva first asset SHA-256
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $revision='e5c8c218e93c1d8daa53bfe0e62b8fbc5a5e991d'
+          $url="https://huggingface.co/dogenthq/KorvaTTS/resolve/$revision/onnx/duration_predictor.onnx?download=true"
+          $out=Join-Path $env:RUNNER_TEMP 'duration_predictor.onnx'
+          Invoke-WebRequest -Uri $url -OutFile $out -MaximumRedirection 10
+          $size=(Get-Item $out).Length
+          if ($size -ne 3573391) { throw "Unexpected Korva duration_predictor size: $size" }
+          $sha=(Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne 'c59dd540d003e781f55efc3f39807ad9939164a34dbc74eb05f39ab41b4632d7') {
+            throw "Korva downloadable file SHA mismatch: $sha"
+          }
+          Write-Host "Korva real-download SHA-256: PASS $sha"
+
+      - name: Preserve 1.7 production gates
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_v17_core.py tests/test_v17_ui.py tests/test_v17_sfx_ui.py tests/test_timeline.py tests/test_japanese_expansion.py
+
+      - name: Build frozen 1.7.2 app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+
+      - name: Frozen app self-test
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+
+      - name: Frozen SFX self-test
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path '.\dist\SRTVoiceStudio\SRTVoiceStudio.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--sfx-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Frozen SFX self-test exited with $($p.ExitCode)" }
+
+      - name: Upload QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.7.2_QA
+          path: SRTVoiceStudio/test-results-1.7.2.xml
+          retention-days: 30
