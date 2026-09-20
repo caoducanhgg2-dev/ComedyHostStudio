@@ -30,6 +30,12 @@ def test_render_cache_roundtrip_and_key_is_voice_text_style_specific(tmp_path):
     assert cache_key(s, "テスト") != cache_key(s, "別の文")
     assert cache.invalidate(s, "テスト")
     assert cache.get(s, "テスト") is None
+    cache.put(s, "one", samples, 48000)
+    cache.put(s, "two", samples, 48000)
+    stats = cache.stats()
+    assert stats["items"] == 2 and stats["bytes"] > 0
+    cleared = cache.clear()
+    assert cleared["items"] == 2 and cache.stats()["items"] == 0
 
 
 def test_quality_control_reports_trim_sfx_and_clipping():
