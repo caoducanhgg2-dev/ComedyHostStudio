@@ -341,3 +341,5 @@ jobs:
           retention-days: 90
 
 # Publication rerun: localized Continuous Voice warning and installer smoke semantics.
+
+# Publication rerun: installer UI smoke validates Generate action availability.
