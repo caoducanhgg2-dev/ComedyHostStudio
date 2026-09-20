@@ -191,12 +191,21 @@ class SfxEditorPanel(QWidget):
         event = self.selected_event()
         if event is None:
             return
-        self.enabled.setChecked(True)
-        index = self.kind.findData(event.kind)
+        override = next(
+            (x for x in self._overrides()
+             if isinstance(x, dict) and int(x.get("caption", -1)) == event.caption_index),
+            None)
+        enabled = bool(override.get("enabled", True)) if override else (
+            event.caption_index not in getattr(self, "disabled_captions", set()))
+        kind = str(override.get("kind") or event.kind) if override else event.kind
+        offset = int(override.get("offset_ms", 0) or 0) if override else 0
+        level = (float(override.get("gain_scale", 1.0) or 1.0)
+                 if override else float(getattr(event, "gain_scale", 1.0)))
+        self.enabled.setChecked(enabled)
+        index = self.kind.findData(kind)
         if index >= 0:
             self.kind.setCurrentIndex(index)
-        self.offset.setValue(0)
-        level = float(getattr(event, "gain_scale", 1.0))
+        self.offset.setValue(max(self.offset.minimum(), min(self.offset.maximum(), offset)))
         best = min(range(self.level.count()),
                    key=lambda i: abs(float(self.level.itemData(i)) - level))
         self.level.setCurrentIndex(best)
