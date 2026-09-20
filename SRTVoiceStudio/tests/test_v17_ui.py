@@ -115,7 +115,7 @@ def test_smart_fit3_tab_and_apply_button_enable_neighbor_smoothing(app, tmp_path
         w.timeline_inspector.optimize.click()
         assert w.smart_fit3.isChecked()
         assert w.adaptive.isChecked()
-        assert w.gap.currentData() == 100
+        assert w.gap.currentData() == -1
         assert w.continuous_voice.isChecked()
         assert "Smart Fit 3.0" in w.status.text()
     finally:
