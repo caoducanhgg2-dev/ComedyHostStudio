@@ -112,7 +112,7 @@ def _install_workspace_controls(window):
     panel.open_mp3_button = QPushButton("Mở MP3 tệp đang chọn")
     panel.retry_caption_button = QPushButton("Làm mới TTS câu đang chọn")
     panel.retry_caption_note = QLabel(
-        "Retry caption dùng cache: chỉ câu được chọn bị xóa raw TTS; các câu cache khác được tái sử dụng.")
+        "Retry caption: tạo lại TTS đúng câu đang chọn; các caption cache khác được giữ và tái sử dụng.")
     panel.retry_caption_note.setWordWrap(True)
     row.addWidget(panel.select_all_button)
     row.addWidget(panel.open_mp3_button)
