@@ -46,6 +46,7 @@ def test_builtin_presets_enable_continuity():
     for value in BUILTIN_PRESETS.values():
         settings=settings_from_mapping(value)
         assert isinstance(settings,Settings) and settings.continuous
+        assert settings.gap_ms == -1
         assert 50<=settings.continuous_target_ms<=250
 
 
