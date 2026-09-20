@@ -1,6 +1,6 @@
 from studio.voice_catalog import (
     capcut_reference_voices,capcut_reference_ids,is_capcut_reference,
-    catalog_ids,CAPCUT_SOURCE
+    capcut_reference_meta,catalog_ids,CAPCUT_SOURCE
 )
 
 def test_capcut_reference_catalog_is_grouped_by_market():
@@ -47,3 +47,14 @@ def test_required_capcut_profiles_are_present():
         'capcut:vn:serious_female','capcut:vn:confident_male',
     }
     assert required <= names
+
+
+def test_capcut_reference_metadata_exposes_market_and_use_case():
+    jp=next(v for v in capcut_reference_voices('Japanese') if v.id=='capcut:jp:witty')
+    meta=capcut_reference_meta(jp)
+    assert meta['market']=='JP'
+    assert meta['gender']=='Trung tính'
+    assert 'review' in meta['use_case'] and 'comedy' in meta['use_case']
+    vn=next(v for v in capcut_reference_voices('Vietnamese') if v.id=='capcut:vn:confident_male')
+    assert capcut_reference_meta(vn)['market']=='VN'
+    assert 'thuyết minh' in capcut_reference_meta(vn)['use_case']
