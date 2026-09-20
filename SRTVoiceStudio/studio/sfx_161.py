@@ -69,6 +69,9 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
         return dict(enabled=False, planned=0, mixed=0, rejected=0, events=[], max_mix_peak=0.0)
 
     events = base.plan_sfx(captions, settings.language, density)
+    from .sfx_editor import apply_sfx_overrides
+    events = apply_sfx_overrides(
+        events, captions, getattr(settings, 'sfx_overrides', ()), settings.language)
     by_index = {c.index: c for c in captions}
 
     # 1.6.0 Medium was only ~20% of active voice RMS and could disappear under
@@ -111,7 +114,8 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
         voice_rms = float(np.sqrt(np.mean(active * active))) if len(active) else .035
         fx64 = fx.astype(np.float64)
         fx_rms = float(np.sqrt(np.mean(fx64 * fx64))) + 1e-12
-        target_rms = min(ceiling, max(floor, voice_rms * ratio))
+        event_scale = float(getattr(event, 'gain_scale', 1.0))
+        target_rms = min(.12, min(ceiling * max(1.0, event_scale), max(floor, voice_rms * ratio * event_scale)))
         gain = min(1.0, target_rms / fx_rms)
         region = np.asarray(master[start:stop], dtype=np.float64)
 
@@ -157,6 +161,8 @@ def mix_auto_sfx(master, captions, settings, rate: int = RATE):
             voice_rms=voice_rms,
             sfx_rms=effective_rms,
             relative_rms=(effective_rms / max(voice_rms, 1e-12)),
+            manual=bool(getattr(event, 'manual', False)),
+            gain_scale=float(getattr(event, 'gain_scale', 1.0)),
         ))
 
     return dict(enabled=True, planned=len(events), mixed=mixed, rejected=rejected,
