@@ -117,11 +117,11 @@ class SfxEditorPanel(QWidget):
         previous_caption = previous.caption_index if previous is not None else None
         self.events = []
         self.disabled_captions = set()
-        self.table.blockSignals(True)
         self.table.setRowCount(0)
         if item is None:
             self.status.setText("Chọn một file trong Workspace để chỉnh SFX.")
             return
+        self.table.blockSignals(True)
         try:
             captions = read_srt(item.source)
             settings = self.window.settings()
