@@ -21,14 +21,19 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
         assert w.gap.currentData()==-1 and 'Tự động' in w.gap.currentText()
         w.language.setCurrentIndex(w.language.findData('English UK'))
         assert w.language.currentText()=='Tiếng Anh (Anh)'
-        assert w.voice.count()==8 and w.voice.findData('bf_emma')>=0
+        assert w.voice.count()==14 and w.voice.findData('bf_emma')>=0
+        uk_ref=w.voice.findData('capcut:uk:witty')
+        assert uk_ref>=0 and '[CapCut • tham khảo]' in w.voice.itemText(uk_ref)
+        assert not w.voice.model().item(uk_ref).isEnabled()
         w.language.setCurrentIndex(w.language.findData('Japanese'))
-        # 1.7.1: 5 Kokoro + 11 optional Aivis voices stay visible before install.
-        assert w.voice.count()==16
+        # 1.8.0: 5 Kokoro + 11 optional Aivis + 6 CapCut references stay visible.
+        assert w.voice.count()==22
         rinne=w.voice.findData('aivis:d2c99ca6-73e5-486c-994e-ee0ce2d74928')
         assert rinne>=0 and 'Rinne El' in w.voice.itemText(rinne) and 'Chưa cài' in w.voice.itemText(rinne)
         assert not w.voice.model().item(rinne).isEnabled()
-        assert '16 giọng' in w.voice_count.text() and '11 chưa cài' in w.voice_count.text()
+        assert '22 mục' in w.voice_count.text() and '11 chờ model' in w.voice_count.text() and '6 CapCut' in w.voice_count.text()
+        anime=w.voice.findData('capcut:jp:anime_girl')
+        assert anime>=0 and not w.voice.model().item(anime).isEnabled()
         w.voice.setCurrentIndex(w.voice.findData('jm_kumo'))
         assert w.settings().voice=='jm_kumo'
         assert 'Kumo' in w.voice.currentText() and 'Trầm vừa' in w.voice.currentText()
