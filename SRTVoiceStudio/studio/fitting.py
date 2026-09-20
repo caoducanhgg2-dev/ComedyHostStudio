@@ -15,7 +15,7 @@ CONTINUOUS_TOLERANCE = 0.035
 CONTINUOUS_WARNING_EXCESS = 0.20
 
 
-def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
+def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel, previous_speed=None):
     if not 1.0 <= settings.speed <= 1.2:
         raise ValueError('Speed phải nằm trong 1.00–1.20x.')
     if settings.overflow not in ('Safe Trim','Stop and Report'):
@@ -70,6 +70,12 @@ def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
             if needed > 1.15:
                 effective = max(effective, min(needed, MAX_EFFECTIVE_SPEED))
     effective = max(min_effective, min(effective, MAX_EFFECTIVE_SPEED))
+    neighbor_limited = False
+    if bool(getattr(settings, 'smart_fit3', False)):
+        from .smartfit3 import smooth_speed
+        effective, neighbor_limited = smooth_speed(
+            effective, previous_speed, needed, classification,
+            min_effective, MAX_EFFECTIVE_SPEED)
 
     def converted_for(value):
         return convert(samples, rate, value / emotion_tempo, folder, cancel)
@@ -176,5 +182,8 @@ def fit_processed(samples, rate, slot, settings, emotion_tempo, folder, cancel):
         post_dsp_trimmed_end=post_trim_end,
         post_dsp_trimmed_seconds=post_trim_start + post_trim_end,
         minimum_effective_speed=min_effective,
-        warning=warning)
+        warning=warning,
+        smart_fit3=bool(getattr(settings, 'smart_fit3', False)),
+        smart_fit3_neighbor_limited=bool(neighbor_limited),
+        previous_caption_speed=previous_speed)
     return fitted, record
