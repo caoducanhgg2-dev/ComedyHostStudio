@@ -5,7 +5,7 @@ from . import preferences
 from . import ui_text as vi
 from .backend import PREVIEW
 from .ratings import score,read_csv
-from .voice_catalog import catalog_voices,capcut_reference_voices,is_capcut_reference,CAPCUT_NOTICE
+from .voice_catalog import catalog_voices,capcut_reference_voices,is_capcut_reference,capcut_reference_meta,CAPCUT_NOTICE
 
 
 class VoicePanel(QWidget):
@@ -188,8 +188,11 @@ class VoicePanel(QWidget):
                'Đã cài • sẵn sàng dùng offline' if is_installed else f'Chưa cài • cần tải gói {voice.engine}')
         trait=vi.voice_characteristic(voice.id)
         trait_line=f'<br>Chú thích: {esc(trait)}' if trait else ''
-        reference_line=f'<br><b>Lưu ý CapCut:</b> {esc(CAPCUT_NOTICE)}' if reference else ''
-        self.details.setHtml(f'<b>{esc(label)}</b><p>Trạng thái: {esc(state)}<br>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}{trait_line}{reference_line}<br>Giấy phép / điều khoản: {esc(voice.license)}</p>'
+        meta=capcut_reference_meta(voice) if reference else {}
+        capcut_detail=(f'<br>Thị trường: {esc(meta.get("market",""))}'
+                       f'<br>Phù hợp: {esc(meta.get("use_case",""))}'
+                       f'<br><b>Lưu ý CapCut:</b> {esc(CAPCUT_NOTICE)}') if reference else ''
+        self.details.setHtml(f'<b>{esc(label)}</b><p>Trạng thái: {esc(state)}<br>Mã giọng: {esc(voice.id)}<br>Bộ tạo giọng: {esc(voice.engine)}<br>Ngôn ngữ: {esc(vi.display(voice.language))}{trait_line}{capcut_detail}<br>Giấy phép / điều khoản: {esc(voice.license)}</p>'
             f'<p>Nguồn: <a href="{esc(voice.source,quote=True)}">{esc(voice.source)}</a></p><p>{assessment}</p>')
 
     def load_ratings(self):
