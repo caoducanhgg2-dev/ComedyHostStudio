@@ -36,7 +36,7 @@ class Settings:
     sfx_density: str = 'Balanced'
     sfx_strength: str = 'Medium'
     smart_fit3: bool = False
-    use_render_cache: bool = True
+    use_render_cache: bool = False
     sfx_overrides: tuple = ()
 
 
