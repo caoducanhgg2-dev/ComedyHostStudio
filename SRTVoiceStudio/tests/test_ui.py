@@ -18,6 +18,7 @@ def test_localized_ui_preserves_ids_and_caption(app,tmp_path):
         subtitle=w.findChild(QLabel,'appSubtitle')
         assert subtitle is not None and subtitle.text().startswith('Tiếng Anh (Mỹ / Anh) / Tiếng Nhật')
         assert w.language.findData('English UK')>=0
+        assert w.gap.currentData()==-1 and 'Tự động' in w.gap.currentText()
         w.language.setCurrentIndex(w.language.findData('English UK'))
         assert w.language.currentText()=='Tiếng Anh (Anh)'
         assert w.voice.count()==8 and w.voice.findData('bf_emma')>=0
