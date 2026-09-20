@@ -58,7 +58,19 @@ class UiChecks:
             if self.stage==0:
                 assert w.settings().emotion=='Natural' and w.settings().effect=='None'
                 assert not w.preview_buttons[2].isEnabled()
-                w.file.setText(str(self.source));w.load_captions();w.caption_select.setCurrentIndex(1)
+                # Since 1.6.1 the production Generate button is queue-driven.
+                # Exercise the same path as a real user instead of bypassing the
+                # Unified Workspace by writing directly to the read-only file pointer.
+                panel=getattr(w,'multi_file_panel',None)
+                assert panel is not None
+                panel.queue.items=[]
+                w.batch_panel.refresh()
+                added=panel.add_paths([self.source])
+                assert len(added)==1
+                assert panel.selected() is not None
+                assert w.file.text().strip()==str(self.source)
+                assert w.generate.isEnabled()
+                w.caption_select.setCurrentIndex(1)
                 assert w.preview_buttons[2].isEnabled()
                 w.preview_buttons[0].click()
             elif self.stage==1:
