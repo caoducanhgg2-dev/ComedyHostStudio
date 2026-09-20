@@ -10,7 +10,7 @@ import hashlib
 import winreg
 
 root=Path(__file__).resolve().parents[1]
-installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.7.0.exe'
+installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.7.1.exe'
 baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.3.0.exe'))
 assert len(baselines)==1, f'Expected one baseline installer, found: {baselines}'
 baseline=baselines[0]
@@ -19,7 +19,7 @@ with baseline.open('rb') as stream:
     assert hashlib.file_digest(stream,'sha256').hexdigest()==expected,'Baseline installer checksum mismatch'
 appkey=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
 appdata=Path(os.environ['LOCALAPPDATA'])/'SRTVoiceStudio'
-target_version='1.7.0'
+target_version='1.7.1'
 results={'version':target_version,'baseline_sha256':expected,'scenarios':{}}
 
 def registry():
@@ -73,7 +73,7 @@ for scenario in ('upgrade','clean'):
         if scenario=='upgrade':
             subprocess.run([str(exe),'--optional-voices-test'],env=env,check=True,timeout=1800)
             data['optional-voices']=read_report('optional-voices-test.json')
-            assert len(data['optional-voices'].get('voices',{}))==6,data['optional-voices']
+            assert len(data['optional-voices'].get('voices',{}))==11,data['optional-voices']
             subprocess.run([str(exe),'--stress-test'],env=env,check=True,timeout=2400);data['real_74_caption_stress']=read_report('stress-test.json')
             subprocess.run([str(exe),'--underfill-test'],env=env,check=True,timeout=900);data['real_30_caption_underfill']=read_report('underfill-test.json')
             for check in ('underfill-v2','batch','voice-benchmark'):
