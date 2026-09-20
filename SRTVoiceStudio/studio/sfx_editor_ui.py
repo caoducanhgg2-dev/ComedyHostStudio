@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from .sfx import KIND_LABELS, plan_sfx
 from .sfx_editor import apply_sfx_overrides, EditedSfxEvent
 from .timeline import read_srt, display_time
+from .batch import DONE, FAILED, CANCELLED, WAITING
 
 
 class SfxEditorPanel(QWidget):
@@ -89,6 +90,11 @@ class SfxEditorPanel(QWidget):
         values.append(dict(value))
         values.sort(key=lambda x: int(x.get("caption", 0)))
         item.sfx_overrides = tuple(values)
+        if item.state in (DONE, FAILED, CANCELLED):
+            item.state = WAITING
+            item.progress = 0
+            item.error = ""
+            item.report = {}
         self.window.batch_panel.refresh()
 
     def _remove_override(self, caption):
@@ -98,6 +104,11 @@ class SfxEditorPanel(QWidget):
         item.sfx_overrides = tuple(
             x for x in self._overrides()
             if not isinstance(x, dict) or int(x.get("caption", -1)) != int(caption))
+        if item.state in (DONE, FAILED, CANCELLED):
+            item.state = WAITING
+            item.progress = 0
+            item.error = ""
+            item.report = {}
         self.window.batch_panel.refresh()
 
     def refresh(self):
