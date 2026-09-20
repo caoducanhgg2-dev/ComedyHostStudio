@@ -208,7 +208,7 @@ jobs:
       - name: Download exact accepted 1.7.2 update
         uses: actions/download-artifact@v4
         with:
-          name: SRTVoiceStudio_Update_1.7.2_to_1.8.0
+          name: SRTVoiceStudio_Update_1.7.1_to_1.7.2
           run-id: 35525345107
           github-token: ${{ github.token }}
           path: baseline-172-update
@@ -246,7 +246,7 @@ jobs:
           Apply-Zip 'baseline-162-update' 'SRTVoiceStudio_Update_1.6.1_to_1.6.2.zip' $env:BASE_162_SHA256 'base162'
           Apply-Zip 'baseline-170-update' 'SRTVoiceStudio_Update_1.6.2_to_1.7.0.zip' $env:BASE_170_SHA256 'base170'
           Apply-Zip 'baseline-171-update' 'SRTVoiceStudio_Update_1.7.0_to_1.7.1.zip' $env:BASE_171_SHA256 'base171'
-          Apply-Zip 'baseline-172-update' 'SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip' $env:BASE_172_SHA256 'base172'
+          Apply-Zip 'baseline-172-update' 'SRTVoiceStudio_Update_1.7.1_to_1.7.2.zip' $env:BASE_172_SHA256 'base172'
           $reg='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{68F0C1C1-17CB-4CED-8261-5C18EB92571A}_is1'
           if ([string](Get-ItemProperty -Path $reg).DisplayVersion -ne '1.7.2') { throw 'Expected exact accepted 1.7.2 baseline.' }
 
@@ -372,9 +372,9 @@ jobs:
       - name: Upload accepted 1.8.0 update
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_Update_1.7.1_to_1.7.2
+          name: SRTVoiceStudio_Update_1.7.2_to_1.8.0
           path: |
             SRTVoiceStudio/update-output-180/SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip
-            SRTVoiceStudio/update-output-180/final-acceptance-1.7.2.json
+            SRTVoiceStudio/update-output-180/final-acceptance-1.8.0.json
             SRTVoiceStudio/update-output-180/update_manifest.json
           retention-days: 90
