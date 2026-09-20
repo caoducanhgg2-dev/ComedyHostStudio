@@ -41,6 +41,7 @@ class TtsCache:
     def __init__(self, root=None):
         self.root = Path(root) if root is not None else data_dir() / "cache" / "tts-v17"
         self.root.mkdir(parents=True, exist_ok=True)
+        self._writes = 0
 
     def path_for(self, settings, text: str) -> Path:
         key = cache_key(settings, text)
@@ -80,7 +81,9 @@ class TtsCache:
             os.replace(temp_name, path)
         finally:
             Path(temp_name).unlink(missing_ok=True)
-        self.cleanup()
+        self._writes += 1
+        if self._writes == 1 or self._writes % 25 == 0:
+            self.cleanup()
         return True
 
     def invalidate(self, settings, text: str) -> bool:
