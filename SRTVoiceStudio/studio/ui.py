@@ -46,6 +46,10 @@ class Worker(QThread):
             elif self.task == 'preview':
                 result = self.preview_cache.get(**self.params, backend=self.backend, cancel=self.cancel,
                     progress=lambda msg: self.progress.emit(0, 1, msg))
+            elif self.task == 'cache_caption':
+                from .render_cache import regenerate_caption_cache
+                result = regenerate_caption_cache(
+                    self.backend, cancel=self.cancel, progress=self.progress.emit, **self.params)
             else:
                 from .diagnostics import diagnose
                 result = diagnose(self.backend, self.cancel,
