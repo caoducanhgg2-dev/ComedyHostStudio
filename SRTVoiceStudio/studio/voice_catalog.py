@@ -100,13 +100,17 @@ KORVA_CATALOG=tuple(
 )
 
 
+_CAPCUT_META={}
+
 def _capcut(market,key,name,language,gender,trait,use_case):
     region={'English US':'US','English UK':'UK','Japanese':'JP','Vietnamese':'VN'}[language]
-    return VoiceInfo(
+    voice=VoiceInfo(
         f'capcut:{market}:{key}',
         f'{name} — {gender} · {trait}',
         language,'CapCut','',0,(),
         'Dịch vụ CapCut • điều khoản/khả dụng do CapCut quản lý',CAPCUT_SOURCE)
+    _CAPCUT_META[voice.id]={'market':region,'gender':gender,'trait':trait,'use_case':use_case}
+    return voice
 
 # Reference-only CapCut profiles grouped by target market. These entries never
 # route to synthesis in SRT Voice Studio; they help users find the matching
@@ -153,10 +157,6 @@ CAPCUT_REFERENCE_CATALOG=(
     _capcut('vn','bestie','Bestie','Vietnamese','Nữ','thân thiện, hội thoại','lifestyle / reaction'),
 )
 
-_CAPCUT_USE_CASE={
-    v.id: v.name.split(' · ',1)[-1] for v in CAPCUT_REFERENCE_CATALOG
-}
-
 
 OPTIONAL_CATALOG=AIVIS_CATALOG+KORVA_CATALOG
 
@@ -178,6 +178,10 @@ def capcut_reference_voices(language=None):
 
 def capcut_reference_ids():
     return {v.id for v in CAPCUT_REFERENCE_CATALOG}
+
+def capcut_reference_meta(voice):
+    voice_id=voice.id if hasattr(voice,'id') else voice
+    return dict(_CAPCUT_META.get(voice_id,{}))
 
 def is_capcut_reference(voice):
     voice_id=voice.id if hasattr(voice,'id') else voice
