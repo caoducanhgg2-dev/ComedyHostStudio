@@ -50,18 +50,18 @@ jobs:
           run-id: 34854705948
           github-token: ${{ github.token }}
           path: SRTVoiceStudio/baseline-installer
-      - name: Test upgrade, clean install, offline A-B-C, six Aivis Japanese voices, British voices, real 74 captions, uninstall
+      - name: Test upgrade, clean install, offline A-B-C, eleven Aivis Japanese voices, British voices, real 74 captions, uninstall
         run: python build_tools/smoke_installer.py
       - name: Installer checksum
         run: |
-          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup_1.4.0.exe -Algorithm SHA256).Hash
-          "$digest  SRTVoiceStudio_Setup_1.4.0.exe" | Set-Content installer-output/SHA256SUMS.txt
+          $digest = (Get-FileHash installer-output/SRTVoiceStudio_Setup_1.7.1.exe -Algorithm SHA256).Hash
+          "$digest  SRTVoiceStudio_Setup_1.7.1.exe" | Set-Content installer-output/SHA256SUMS.txt
       - name: Upload verified installer
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_Setup_1.4.0
+          name: SRTVoiceStudio_Setup_1.7.1
           path: |
-            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup_1.4.0.exe
+            SRTVoiceStudio/installer-output/SRTVoiceStudio_Setup_1.7.1.exe
             SRTVoiceStudio/installer-output/SHA256SUMS.txt
             SRTVoiceStudio/installer-output/acceptance.json
             SRTVoiceStudio/test-results.xml
@@ -84,21 +84,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_1.4_EN7_MP3
+          name: SRTVoiceStudio_1.7.1_EN7_MP3
           path: ~/AppData/Local/SRTVoiceStudio/UnderfillV2/
           if-no-files-found: warn
       - name: Upload voice auditions
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SRTVoiceStudio_1.4_Voice_Auditions
+          name: SRTVoiceStudio_1.7.1_Voice_Auditions
           path: ~/AppData/Local/SRTVoiceStudio/VoiceBenchmarks/
           if-no-files-found: warn
       - name: Build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-diagnostics-1.4
+          name: build-diagnostics-1.7.1
           path: |
             SRTVoiceStudio/test-results.xml
             SRTVoiceStudio/installed-dependencies.txt
