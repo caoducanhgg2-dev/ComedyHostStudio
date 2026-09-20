@@ -42,7 +42,7 @@ def optional_test(folder,cancel):
     if backend is None:raise RuntimeError('Chưa cài gói Aivis để kiểm thử offline.')
     try:
         voices=backend.list_voices();durations={}
-        assert len(voices)==6,'Bản 1.4 phải có Mao, Kohaku và 4 giọng Nhật mở rộng.'
+        assert len(voices)==11,'Bản 1.7.1 phải có đủ 11 giọng Aivis Nhật đã ghim.'
         for voice in voices:
             samples,rate=backend.synthesize('これはオフライン音声の確認です。','Japanese',voice.id,cancel)
             assert len(samples)>0 and rate==48000;durations[voice.id]=len(samples)/rate
@@ -73,7 +73,7 @@ def optional_test(folder,cancel):
         b=cache.get('B',slot.caption.text,selected,backend,cancel,slot);c=cache.get('C',slot.caption.text,selected,backend,cancel,slot)
         expected,_=fit_processed(b.samples,b.rate,slot,selected,cache.emotion_tempo,folder,cancel)
         assert count[0]==1 and np.array_equal(c.samples,expected)
-        return dict(voices=durations,expansion_voices=4,stress_captions=74,overlaps=0,start_times_unchanged=True,native_style=True,dynamic_style=True,abc_shared_fit=True)
+        return dict(voices=durations,expansion_voices=9,stress_captions=74,overlaps=0,start_times_unchanged=True,native_style=True,dynamic_style=True,abc_shared_fit=True)
     finally:pack.close()
 
 
@@ -90,7 +90,7 @@ def run_test(name):
                 evidence=data_dir()/'UnderfillV2';evidence.mkdir(exist_ok=True)
                 destination=evidence/'EN7_American_Comedy_Review_Voice.mp3';shutil.copyfile(result['output'],destination);result['output']=str(destination)
             elif name=='install-voice':
-                p=AivisPack();p.install(cancel);result=dict(installed=p.available(),complete=p.complete(),japanese_aivis_voices=6)
+                p=AivisPack();p.install(cancel);result=dict(installed=p.available(),complete=p.complete(),japanese_aivis_voices=11)
             elif name=='optional-voices':result=optional_test(folder,cancel)
             elif name=='voice-benchmark':
                 from .voice_benchmarks import generate
