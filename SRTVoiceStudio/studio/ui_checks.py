@@ -79,7 +79,10 @@ class UiChecks:
                 w.effect.setCurrentIndex(w.effect.findData('None'))
                 w.preview_buttons[2].click()
             elif self.stage==4:
-                assert self.calls==2 and w.preview_cache.details['speed']==.88
+                assert self.calls==2
+                details=w.preview_cache.details
+                assert details['underfilled_at_hard_minimum'] is True
+                assert abs(details['speed']-details['minimum_effective_speed']) < 1e-9
                 assert 'CÂU THOẠI NGẮN / CÒN KHOẢNG LẶNG' in w.preview_details.text()
                 assert w.voice.currentData()=='af_heart' and 'Heart' in w.voice.currentText()
                 assert w.generate.text()=='▶  TẠO MP3'
