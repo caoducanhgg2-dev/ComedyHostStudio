@@ -358,3 +358,4 @@ jobs:
 # Publication rerun: localized Continuous Voice warning and installer smoke semantics.
 
 # Publication rerun: installer UI smoke validates Generate action availability.
+# 1.6.2 compatibility rerun after Adaptive Timeline merge.
