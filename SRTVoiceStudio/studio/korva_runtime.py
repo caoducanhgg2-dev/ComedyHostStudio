@@ -78,8 +78,27 @@ class VoiceStyle:
         self.dp=np.asarray(data["style_dp"]["data"],dtype=np.float32).reshape([int(x) for x in data["style_dp"]["dims"]])
         if self.ttl.shape[0]!=1 or self.dp.shape[0]!=1:raise ValueError("Voice style Korva không hợp lệ.")
 
-def _fade_tail(wav,rate):
-    wav=np.asarray(wav,dtype=np.float32).reshape(-1).copy();n=min(len(wav),int(.03*rate))
+def _clean_tail(wav,rate):
+    """Remove detached vocoder burst/silence then fade to zero (Korva v0.1.3 logic)."""
+    wav=np.asarray(wav,dtype=np.float32).reshape(-1).copy()
+    frame=max(1,int(.02*rate));start=max(0,len(wav)-int(.6*rate))
+    gap_start=None;run=0;best=None
+    for i in range(start,max(start,len(wav)-frame),frame):
+        block=wav[i:i+frame]
+        rms=float(np.sqrt(np.mean(block*block))) if len(block) else 0.0
+        if rms<.01:
+            if run==0:gap_start=i
+            run+=frame
+        else:
+            if run>=.05*rate:best=gap_start
+            run=0
+    if run>=.05*rate:best=gap_start
+    if best is not None:
+        after=wav[best+int(.05*rate):]
+        peak=float(np.max(np.abs(after))) if len(after) else 0.0
+        if peak<.05 or (len(after)<=int(.35*rate) and peak>=.4):
+            wav=wav[:best+int(.05*rate)]
+    n=min(len(wav),int(.03*rate))
     if n:wav[-n:]*=np.linspace(1.0,0.0,n,dtype=np.float32)
     return wav
 
@@ -119,7 +138,7 @@ class KorvaRuntime:
                 "text_mask":text_mask,"latent_mask":latent_mask,"current_step":np.asarray([step],dtype=np.float32),
                 "total_step":total})[0]
         wav=self.vocoder.run(None,{"latent":latent})[0]
-        return _fade_tail(np.asarray(wav,dtype=np.float32).reshape(-1)[:int(float(duration[0])*self.rate)],self.rate)
+        return _clean_tail(np.asarray(wav,dtype=np.float32).reshape(-1)[:int(float(duration[0])*self.rate)],self.rate)
 
     def synthesize(self,text,voice,total_steps=16,speed=1.0,seed=None):
         if not 1<=int(total_steps)<=MAX_TOTAL_STEPS:raise ValueError("Korva total_steps không hợp lệ.")
