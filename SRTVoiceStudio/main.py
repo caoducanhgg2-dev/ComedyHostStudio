@@ -47,9 +47,9 @@ def main():
             from studio.diagnostics import self_test
             return self_test()
         from studio.ui import Window
-        from studio.v161_upgrade import enhance_window_v161
+        from studio.v17_upgrade import enhance_window_v17
         from studio.hotfix_151 import stabilize_qactions
-        window = stabilize_qactions(enhance_window_v161(Window()))
+        window = stabilize_qactions(enhance_window_v17(Window()))
         window.show()
         if '--ui-smoke' in sys.argv:
             from studio.ui_checks import UiChecks
