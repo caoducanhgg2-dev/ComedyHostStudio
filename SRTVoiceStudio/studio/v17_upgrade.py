@@ -63,6 +63,7 @@ def _install_17_settings(window):
         refresh_cache_status()
 
     window.clear_cache_button.clicked.connect(clear_cache)
+    window.refresh_cache_status = refresh_cache_status
     refresh_cache_status()
 
     base_settings = window.settings
@@ -192,6 +193,8 @@ def _install_quality_reporting(window):
             window.status.setText(
                 f"Đã tạo lại TTS câu {getattr(window, '_v17_retry_caption', '?')} · "
                 "các caption cache khác được giữ nguyên.")
+            if hasattr(window, "refresh_cache_status"):
+                window.refresh_cache_status()
             return
         base_success(task, result)
         if task == "render" and isinstance(result, dict):
@@ -210,6 +213,8 @@ def _install_quality_reporting(window):
                 window.status.text() + f" · QC {quality.get('status', 'WARN')}")
             if hasattr(window, "quality_panel"):
                 window.quality_panel.refresh()
+            if hasattr(window, "refresh_cache_status"):
+                window.refresh_cache_status()
         elif task == "batch":
             items = list(window.multi_file_panel.queue.items)
             done = [i for i in items if i.state == DONE and i.report]
@@ -224,6 +229,8 @@ def _install_quality_reporting(window):
                 window.report.setPlainText(window.report.toPlainText().rstrip() + "\n" + "\n".join(lines))
             if hasattr(window, "quality_panel"):
                 window.quality_panel.refresh()
+            if hasattr(window, "refresh_cache_status"):
+                window.refresh_cache_status()
 
     window.success = success_17
 
