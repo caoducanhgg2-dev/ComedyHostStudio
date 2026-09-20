@@ -35,7 +35,35 @@ def _install_17_settings(window):
         "Cache chỉ lưu raw TTS. Đổi Emotion/FX/Smart Fit/SFX vẫn xử lý lại an toàn.")
     row.addWidget(window.smart_fit3)
     row.addWidget(window.render_cache_enabled)
+    window.cache_status = QLabel()
+    window.clear_cache_button = QPushButton("Xóa Cache TTS")
+    row.addWidget(window.cache_status)
+    row.addWidget(window.clear_cache_button)
     timeline_group.layout().addLayout(row)
+
+    def refresh_cache_status():
+        try:
+            stats = TtsCache().stats()
+            mb = float(stats["bytes"]) / (1024 * 1024)
+            window.cache_status.setText(f"Cache: {stats['items']} câu · {mb:.1f} MB")
+        except OSError:
+            window.cache_status.setText("Cache: không đọc được")
+
+    def clear_cache():
+        if window.busy():
+            return
+        try:
+            result = TtsCache().clear()
+            mb = float(result["bytes"]) / (1024 * 1024)
+            window.status.setText(
+                f"Đã xóa Render Cache: {result['items']} câu · {mb:.1f} MB. "
+                "SRT và MP3 không bị thay đổi.")
+        except OSError as exc:
+            window.status.setText("Không xóa được Render Cache: " + str(exc))
+        refresh_cache_status()
+
+    window.clear_cache_button.clicked.connect(clear_cache)
+    refresh_cache_status()
 
     base_settings = window.settings
 
@@ -47,7 +75,8 @@ def _install_17_settings(window):
         )
 
     window.settings = MethodType(settings_17, window)
-    window.edit_controls.extend([window.smart_fit3, window.render_cache_enabled])
+    window.edit_controls.extend([
+        window.smart_fit3, window.render_cache_enabled, window.clear_cache_button])
 
     inspector = getattr(window, "timeline_inspector", None)
     if inspector is not None:
