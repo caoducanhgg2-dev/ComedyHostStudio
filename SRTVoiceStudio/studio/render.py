@@ -12,6 +12,8 @@ from .fitting import fit_processed
 from .continuity import trim_edge_silence
 from .voice_backends import synthesize_selected
 from .sfx import mix_auto_sfx, DENSITIES, STRENGTHS
+from .render_cache import TtsCache
+from .quality import measure_master, analyze_render
 
 @dataclass(frozen=True)
 class Settings:
@@ -33,6 +35,9 @@ class Settings:
     auto_sfx: bool = False
     sfx_density: str = 'Balanced'
     sfx_strength: str = 'Medium'
+    smart_fit3: bool = False
+    use_render_cache: bool = True
+    sfx_overrides: tuple = ()
 
 
 def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
@@ -56,6 +61,15 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
     lengths, records = [], []
     sfx_report = dict(enabled=False, planned=0, mixed=0, rejected=0, events=[], max_mix_peak=0.0)
     logging.info('Render settings: %s', asdict(settings))
+    cache = None
+    if bool(getattr(settings, 'use_render_cache', True)):
+        try:
+            cache = TtsCache()
+        except OSError:
+            logging.exception('Cannot initialize TTS render cache; continuing without cache')
+    cache_hits = cache_misses = 0
+    previous_speed = None
+    master_metrics = {}
     # Master is disk-backed; even long input cannot allocate hours of PCM in RAM.
     with tempfile.TemporaryDirectory(prefix='job-', dir=workspace()) as temp:
         temp = Path(temp)
@@ -70,17 +84,32 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                 check_cancel(cancel)
                 c = slot.caption
                 progress(i, len(slots), f'Creating voice {i+1} / {len(slots)} • Caption {c.index}')
-                samples, rate = synthesize_selected(backend,c.text,settings,cancel,
-                    lambda msg: progress(i, len(slots), msg))
-                samples = np.asarray(samples, dtype=np.float32).reshape(-1)
-                if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
-                    raise RuntimeError(f'CAPTION {c.index}: TTS trả về audio rỗng hoặc không hợp lệ.')
+                cached = cache.get(settings, c.text) if cache is not None else None
+                if cached is not None:
+                    samples, rate = cached
+                    cache_hits += 1
+                    progress(i, len(slots), f'Cache TTS HIT • Caption {c.index}')
+                else:
+                    samples, rate = synthesize_selected(backend,c.text,settings,cancel,
+                        lambda msg: progress(i, len(slots), msg))
+                    samples = np.asarray(samples, dtype=np.float32).reshape(-1)
+                    if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
+                        raise RuntimeError(f'CAPTION {c.index}: TTS trả về audio rỗng hoặc không hợp lệ.')
+                    cache_misses += 1
+                    if cache is not None:
+                        try:
+                            cache.put(settings, c.text, samples, rate)
+                        except OSError:
+                            logging.exception('Cannot write TTS cache for caption %s', c.index)
                 base_duration = len(samples)/rate
                 samples, trim_start, trim_end = trim_edge_silence(samples, rate, settings.continuous)
                 if not len(samples) or not np.isfinite(samples).all() or not np.any(np.abs(samples) > 1e-7):
                     raise RuntimeError(f'CAPTION {c.index}: Continuous Voice tạo audio không hợp lệ.')
                 processed, emotion_tempo, emotion, intensity = processor.process(samples, rate, settings, c.text)
-                fitted, record = fit_processed(processed, rate, slot, settings, emotion_tempo, temp, cancel)
+                fitted, record = fit_processed(
+                    processed, rate, slot, settings, emotion_tempo, temp, cancel,
+                    previous_speed=previous_speed)
+                previous_speed = record.get('speed', previous_speed)
                 record.update(tts_seconds=base_duration, emotion=emotion, intensity=intensity,
                               effect=settings.effect, strength=settings.strength,
                               continuity_trimmed_start=trim_start,
@@ -99,6 +128,7 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
             if settings.auto_sfx:
                 progress(len(slots), len(slots), 'TIMELINE VALID • Auto SFX: đang phân tích và kiểm tra artifact')
             sfx_report = mix_auto_sfx(master, captions, settings, RATE)
+            master_metrics = measure_master(master)
             master.flush()
         finally:
             del master
@@ -139,9 +169,17 @@ def render(srt, output, settings, backend, cancel, progress=lambda *_: None):
                        sfx_rejected=int(sfx_report.get('rejected',0)),
                        sfx_max_mix_peak=float(sfx_report.get('max_mix_peak',0.0)),
                        sfx_events=sfx_report.get('events',[]),
+                       smart_fit3=bool(getattr(settings, 'smart_fit3', False)),
+                       smart_fit3_neighbor_adjusted=sum(bool(r.get('smart_fit3_neighbor_limited')) for r in records),
+                       render_cache=bool(cache is not None),
+                       cache_hits=int(cache_hits), cache_misses=int(cache_misses),
+                       master_metrics=master_metrics,
                        duration=display_time(end_ms), duration_ms=end_ms, records=records)
+        summary['quality'] = analyze_render(summary)
+        summary['quality_status'] = summary['quality']['status']
+        summary['quality_issues'] = summary['quality']['issues']
         progress(len(slots), len(slots),
-                 f"TIMELINE VALID • SFX {summary['sfx_mixed']}/{summary['sfx_planned']} • Đang mã hóa MP3")
+                 f"TIMELINE VALID • QC {summary['quality_status']} • SFX {summary['sfx_mixed']}/{summary['sfx_planned']} • Đang mã hóa MP3")
         # Stage in the destination filesystem so publishing is atomic on any drive.
         # Register this path for recovery after a process crash.
         fd, staged = tempfile.mkstemp(prefix='.srtvs-', suffix='.mp3', dir=output.parent)
