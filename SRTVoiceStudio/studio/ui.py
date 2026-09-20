@@ -133,7 +133,7 @@ class Window(QMainWindow):
         badge = QLabel('●  Ngoại tuyến · Trên máy')
         badge.setStyleSheet('color:#46dec2; background:#123b39; border-radius:14px; padding:7px 13px;')
         header.addWidget(badge); outer.addLayout(header)
-        subtitle = QLabel('Tiếng Anh (Mỹ / Anh) / Tiếng Nhật · Chỉ xuất một MP3 · Giữ nguyên mốc SRT')
+        subtitle = QLabel('Tiếng Anh (Mỹ / Anh) / Tiếng Nhật / Tiếng Việt · Chỉ xuất một MP3 · Giữ nguyên mốc SRT')
         subtitle.setObjectName('appSubtitle')
         subtitle.setStyleSheet('color:#9db1c9;'); outer.addWidget(subtitle)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
