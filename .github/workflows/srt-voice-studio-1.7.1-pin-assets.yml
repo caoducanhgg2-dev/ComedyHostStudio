@@ -1,0 +1,61 @@
+name: Pin SRT Voice Studio 1.7.1 Voice Assets
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.7.1-voice-expansion']
+    paths:
+      - '.github/workflows/srt-voice-studio-1.7.1-pin-assets.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve pinned remote asset metadata
+        shell: python
+        run: |
+          import urllib.request, json
+          REV='e5c8c218e93c1d8daa53bfe0e62b8fbc5a5e991d'
+          voices=['bao_kim','khanh_vy','ngoc_huyen','phuong_linh','quynh_nhu',
+                  'gia_bao','hoang_nam','huu_dat','quang_huy','thanh_phong']
+          korva=['onnx/duration_predictor.onnx','onnx/text_encoder.onnx',
+                 'onnx/vector_estimator.onnx','onnx/vocoder.onnx',
+                 'onnx/tts.json','onnx/unicode_indexer.json'] + [
+                 f'voice_styles/{v}.json' for v in voices]
+          def head(url):
+              req=urllib.request.Request(url,method='HEAD',headers={'User-Agent':'SRTVoiceStudio/1.7.1'})
+              with urllib.request.urlopen(req,timeout=60) as r:
+                  headers={k.lower():v for k,v in r.headers.items()}
+                  return {'url':r.geturl(),'status':r.status,'headers':headers}
+          output={'korva':{},'aivis':{}}
+          for path in korva:
+              url=f'https://huggingface.co/dogenthq/KorvaTTS/resolve/{REV}/{path}?download=true'
+              try:
+                  m=head(url);h=m['headers']
+                  output['korva'][path]={
+                      'size':h.get('content-length') or h.get('x-linked-size'),
+                      'etag':h.get('etag'),
+                      'x_linked_etag':h.get('x-linked-etag'),
+                      'commit':h.get('x-repo-commit'),
+                      'final_url':m['url'][:160],
+                  }
+              except Exception as e:output['korva'][path]={'error':repr(e)}
+          models=['f493ab6c-1ffa-4534-9bbd-2ba398f17cd5',
+                  '21d8d535-f206-462d-a3bb-05f8252dede7',
+                  'f83c385c-829b-40c4-8c11-639027e61636',
+                  'b1b8072f-809f-4c6d-9ba1-2ca94d9c3663',
+                  '9a7feb22-b6f3-4f79-92d9-26849e063fa1']
+          for uid in models:
+              url=f'https://api.aivis-project.com/v1/aivm-models/{uid}/download?model_type=AIVMX'
+              try:
+                  m=head(url);h=m['headers']
+                  output['aivis'][uid]={
+                      'size':h.get('content-length'),
+                      'etag':h.get('etag'),
+                      'final_url':m['url'][:160],
+                  }
+              except Exception as e:output['aivis'][uid]={'error':repr(e)}
+          print(json.dumps(output,ensure_ascii=False,indent=2))
