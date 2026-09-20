@@ -10,7 +10,7 @@ import hashlib
 import winreg
 
 root=Path(__file__).resolve().parents[1]
-installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.4.0.exe'
+installer=root/'installer-output'/'SRTVoiceStudio_Setup_1.7.0.exe'
 baselines=list((root/'baseline-installer').rglob('SRTVoiceStudio_Setup_1.3.0.exe'))
 assert len(baselines)==1, f'Expected one baseline installer, found: {baselines}'
 baseline=baselines[0]
