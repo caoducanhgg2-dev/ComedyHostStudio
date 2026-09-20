@@ -21,6 +21,7 @@ class QueueItem:
     output: str = ''
     error: str = ''
     report: dict = field(default_factory=dict)
+    sfx_overrides: tuple = field(default_factory=tuple)
 
     def inspect(self):
         try:
@@ -100,7 +101,9 @@ class BatchQueue:
                     self.current_id = item.id
                     self.current_cancel = threading.Event()
                     cancel = self.current_cancel
-                    settings = replace(common_settings or item.settings)
+                    settings = replace(
+                        common_settings or item.settings,
+                        sfx_overrides=tuple(item.sfx_overrides or ()))
                     item.settings = settings
                 update(item)
                 try:
