@@ -38,8 +38,10 @@ class QualityPanel(QWidget):
 
         actions = QHBoxLayout()
         self.open_workspace = QPushButton("Mở file trong Workspace")
+        self.open_issue = QPushButton("Mở caption lỗi đầu tiên")
         self.refresh_button = QPushButton("Làm mới QC")
         actions.addWidget(self.open_workspace)
+        actions.addWidget(self.open_issue)
         actions.addWidget(self.refresh_button)
         actions.addStretch()
         layout.addLayout(actions)
@@ -55,6 +57,7 @@ class QualityPanel(QWidget):
 
         self.table.itemSelectionChanged.connect(self.show_selected)
         self.open_workspace.clicked.connect(self.open_in_workspace)
+        self.open_issue.clicked.connect(self.open_first_issue)
         self.refresh_button.clicked.connect(self.refresh)
 
     def _items(self):
@@ -149,7 +152,13 @@ class QualityPanel(QWidget):
             lines.append("")
             lines.append("Vấn đề:")
             for issue in issues:
-                lines.append("• " + str(issue.get("message") or issue.get("code") or "Issue"))
+                message = str(issue.get("message") or issue.get("code") or "Issue")
+                captions = [str(x) for x in list(issue.get("captions") or [])]
+                if captions:
+                    message += " · câu " + ", ".join(captions[:12])
+                    if len(captions) > 12:
+                        message += "…"
+                lines.append("• " + message)
         else:
             lines.append("")
             lines.append("Không phát hiện lỗi đo được.")
@@ -168,3 +177,31 @@ class QualityPanel(QWidget):
         self.window.tabs.setCurrentIndex(0)
         self.window.multi_file_panel.table.selectRow(index)
         self.window.multi_file_panel.activate_selected()
+
+
+    def open_first_issue(self):
+        row = self.table.currentRow()
+        items = self._items()
+        if not (0 <= row < len(items)):
+            return
+        item = items[row]
+        report = item.report if isinstance(item.report, dict) else {}
+        quality = report.get("quality") if isinstance(report.get("quality"), dict) else {}
+        captions = []
+        for issue in list(quality.get("issues") or []):
+            captions.extend(issue.get("captions") or [])
+            if captions:
+                break
+        self.open_in_workspace()
+        if not captions:
+            self.window.status.setText("QC của file này không có caption cụ thể để mở.")
+            return
+        target = int(captions[0])
+        for index in range(1, self.window.caption_select.count()):
+            pos = self.window.caption_select.itemData(index)
+            if pos is None or not (0 <= pos < len(self.window.captions)):
+                continue
+            if self.window.captions[pos].index == target:
+                self.window.caption_select.setCurrentIndex(index)
+                self.window.status.setText(f"QC: đã mở caption {target} cần kiểm tra.")
+                return
