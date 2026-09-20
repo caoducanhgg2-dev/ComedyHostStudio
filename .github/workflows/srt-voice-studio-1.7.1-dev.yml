@@ -1,0 +1,66 @@
+name: Test SRT Voice Studio 1.7.1 Voice Expansion
+on:
+  workflow_dispatch:
+  push:
+    branches: ['srt-voice-studio/1.7.1-voice-expansion']
+    paths:
+      - 'SRTVoiceStudio/**'
+      - '.github/workflows/srt-voice-studio-1.7.1-dev.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: srt-voice-studio-1.7.1-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    runs-on: windows-2022
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - name: Install locked Windows wheels
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps unidic-lite==1.0.8
+          python -m pip check
+      - name: Prepare offline assets
+        working-directory: SRTVoiceStudio
+        run: python build_tools/prepare_assets.py
+      - name: Full regression suite
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q --junitxml=test-results-1.7.1.xml
+      - name: Voice Expansion gates
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_voice_catalog_1_4_1.py tests/test_japanese_expansion.py tests/test_voice_expansion_171.py tests/test_korva_pack_171.py tests/test_voice_backends.py
+      - name: Preserve 1.7 production gates
+        working-directory: SRTVoiceStudio
+        run: python -m pytest -q tests/test_v17_core.py tests/test_v17_ui.py tests/test_v17_sfx_ui.py tests/test_timeline.py
+      - name: Build frozen 1.7.1 app
+        working-directory: SRTVoiceStudio
+        run: python -m PyInstaller --clean --noconfirm SRTVoiceStudio.spec
+      - name: Frozen app self-test
+        working-directory: SRTVoiceStudio
+        run: python build_tools/check_frozen.py
+      - name: Frozen SFX self-test
+        working-directory: SRTVoiceStudio
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path '.\dist\SRTVoiceStudio\SRTVoiceStudio.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--sfx-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Frozen SFX self-test exited with $($p.ExitCode)" }
+      - name: Upload QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SRTVoiceStudio_1.7.1_QA
+          path: SRTVoiceStudio/test-results-1.7.1.xml
+          retention-days: 30
