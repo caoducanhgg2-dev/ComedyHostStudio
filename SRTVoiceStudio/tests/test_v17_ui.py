@@ -18,7 +18,8 @@ def _window(app, tmp_path, monkeypatch):
     apply_patch()
     from studio.ui import Window
     from studio.v17_upgrade import enhance_window_v17
-    return enhance_window_v17(Window())
+    from studio.hotfix_151 import stabilize_qactions
+    return stabilize_qactions(enhance_window_v17(Window()))
 
 
 def test_17_workspace_exposes_shared_smartfit_cache_and_multiselect(app, tmp_path, monkeypatch):
@@ -36,7 +37,7 @@ def test_17_workspace_exposes_shared_smartfit_cache_and_multiselect(app, tmp_pat
         w.close()
 
 
-def test_17_retry_caption_invalidates_only_selected_cache(app, tmp_path, monkeypatch):
+def test_17_retry_caption_schedules_only_selected_tts_regeneration(app, tmp_path, monkeypatch):
     w = _window(app, tmp_path, monkeypatch)
     try:
         srt = tmp_path / "a.srt"
@@ -46,19 +47,16 @@ def test_17_retry_caption_invalidates_only_selected_cache(app, tmp_path, monkeyp
             encoding="utf-8")
         w.multi_file_panel.add_paths([srt])
         w.caption_select.setCurrentIndex(1)
-        from studio.render_cache import TtsCache
-        cache = TtsCache()
-        settings = w.settings()
-        first = w.captions[0]
-        second = w.captions[1]
-        audio = np.ones(2400, dtype=np.float32) * .02
-        cache.put(settings, first.text, audio, 48000)
-        cache.put(settings, second.text, audio, 48000)
-        assert cache.get(settings, first.text) is not None
-        assert cache.get(settings, second.text) is not None
+        captured = {}
+        def fake_start(task, params):
+            captured["task"] = task
+            captured["params"] = params
+        w.start = fake_start
         w.multi_file_panel.retry_caption_button.click()
-        assert cache.get(settings, first.text) is None
-        assert cache.get(settings, second.text) is not None
+        assert captured["task"] == "cache_caption"
+        assert captured["params"]["text"] == w.captions[0].text
+        assert captured["params"]["settings"].use_render_cache is True
+        assert w._v17_retry_caption == 1
     finally:
         w.close()
 
