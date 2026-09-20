@@ -76,7 +76,8 @@ class QualityPanel(QWidget):
             counts[status] += 1
 
             issues = list(quality.get("issues") or [])
-            metrics = report.get("master_metrics") if isinstance(report.get("master_metrics"), dict) else {}
+            encoded = report.get("encoded_metrics") if isinstance(report.get("encoded_metrics"), dict) else {}
+            metrics = encoded or (report.get("master_metrics") if isinstance(report.get("master_metrics"), dict) else {})
             planned = int(report.get("sfx_planned", 0) or 0)
             mixed = int(report.get("sfx_mixed", 0) or 0)
             rejected = int(report.get("sfx_rejected", 0) or 0)
@@ -134,10 +135,13 @@ class QualityPanel(QWidget):
             f"SFX: {report.get('sfx_mixed', 0)}/{report.get('sfx_planned', 0)} mixed · "
             f"{report.get('sfx_rejected', 0)} rejected",
         ]
-        metrics = report.get("master_metrics") if isinstance(report.get("master_metrics"), dict) else {}
+        master_metrics = report.get("master_metrics") if isinstance(report.get("master_metrics"), dict) else {}
+        encoded_metrics = report.get("encoded_metrics") if isinstance(report.get("encoded_metrics"), dict) else {}
+        metrics = encoded_metrics or master_metrics
         if metrics:
+            label = "MP3 cuối" if encoded_metrics else "Audio master"
             lines.append(
-                f"Audio master: peak {float(metrics.get('peak', 0.0)):.3f} · "
+                f"{label}: peak {float(metrics.get('peak', 0.0)):.3f} · "
                 f"RMS {float(metrics.get('rms', 0.0)):.4f} · "
                 f"DC {float(metrics.get('dc', 0.0)):.5f} · "
                 f"clipping {int(metrics.get('clipping_samples', 0) or 0)}")
