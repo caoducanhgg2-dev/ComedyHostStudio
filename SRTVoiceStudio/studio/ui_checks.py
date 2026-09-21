@@ -104,7 +104,16 @@ class UiChecks:
                 w.generate.click()
             elif self.stage==5:
                 assert self.output.is_file() and len(list(self.folder.glob('*.mp3')))==1
-                assert 'MỐC THỜI GIAN HỢP LỆ' in w.report.toPlainText() and '0 chồng tiếng' in w.report.toPlainText()
+                # Unified Workspace replaces the legacy single-render text report
+                # with a queue summary. Validate the authoritative per-item render
+                # report instead of depending on obsolete Vietnamese display text.
+                done=[item for item in w.multi_file_panel.queue.items
+                      if item.state=='Hoàn tất' and item.output]
+                assert len(done)==1
+                report=dict(done[0].report or {})
+                assert int(report.get('overlaps',-1))==0
+                assert int(report.get('valid',0))==int(report.get('total',-1))==2
+                assert 'HÀNG ĐỢI HOÀN TẤT' in w.report.toPlainText()
                 assert w.preview_temp is None and w.preview_device is None and w.preview_cache.base is None
                 assert not list(self.folder.glob('*.wav'))
                 self.finish(True)
