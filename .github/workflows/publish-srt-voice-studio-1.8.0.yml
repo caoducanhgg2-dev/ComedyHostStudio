@@ -1,0 +1,195 @@
+name: Publish SRT Voice Studio 1.8.0
+
+on:
+  push:
+    branches: ['release/srt-voice-studio-1.8.0']
+    paths:
+      - '.github/workflows/publish-srt-voice-studio-1.8.0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download accepted 1.8.0 update artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Update_1.7.2_to_1.8.0
+          run-id: 35572546084
+          github-token: ${{ github.token }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          path: accepted
+
+      - name: Download verified 1.8.0 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SRTVoiceStudio_Setup_1.8.0
+          run-id: 35572522685
+          github-token: ${{ github.token }}
+          repository: caoducanhgg2-dev/ComedyHostStudio
+          path: installer
+
+      - name: Validate release payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP='accepted/SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip'
+          EVIDENCE='accepted/final-acceptance-1.8.0.json'
+          MANIFEST='accepted/update_manifest.json'
+          EXE='installer/SRTVoiceStudio_Setup_1.8.0.exe'
+          ISUM='installer/SHA256SUMS.txt'
+          test -f "$ZIP"
+          test -f "$EVIDENCE"
+          test -f "$MANIFEST"
+          test -f "$EXE"
+          test -f "$ISUM"
+
+          python - "$ZIP" "$EVIDENCE" "$MANIFEST" "$EXE" "$ISUM" <<'PY'
+          import hashlib,json,sys,re
+          zip_path,evidence_path,manifest_path,exe_path,sum_path=sys.argv[1:]
+          def sha(path):
+              h=hashlib.sha256()
+              with open(path,'rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+              return h.hexdigest().upper()
+          evidence=json.load(open(evidence_path,encoding='utf-8'))
+          manifest=json.load(open(manifest_path,encoding='utf-8'))
+          assert evidence['version']=='1.8.0'
+          assert evidence['from_version']=='1.7.2'
+          assert evidence['capcut_catalog'] is True
+          assert evidence['capcut_reference_profiles']==31
+          assert evidence['capcut_render_disabled'] is True
+          assert evidence['exact_final_tree'] is True
+          assert evidence['rollback_passed'] is True
+          assert evidence['corruption_guard_passed'] is True
+          assert evidence['reapply_passed'] is True
+          assert evidence['korva_real_download_sha_passed'] is True
+          assert manifest['from_version']=='1.7.2'
+          assert manifest['to_version']=='1.8.0'
+          expected_zip='1A1A00DB932627159AB45C6563AC6A1E1080BADF376866490F6F078D58238F72'
+          actual_zip=sha(zip_path)
+          assert actual_zip==expected_zip,(actual_zip,expected_zip)
+          installer_sha=sha(exe_path)
+          sum_text=open(sum_path,encoding='utf-8-sig').read()
+          match=re.search(r'([0-9A-Fa-f]{64})',sum_text)
+          assert match and match.group(1).upper()==installer_sha,(sum_text,installer_sha)
+          print('1.8.0 release validation: PASS')
+          print('UPDATE_SHA256='+actual_zip)
+          print('INSTALLER_SHA256='+installer_sha)
+          open('installer-sha.txt','w',encoding='utf-8').write(installer_sha+'\n')
+          PY
+
+          mkdir -p release-files
+          cp "$ZIP" release-files/
+          cp "$EVIDENCE" release-files/
+          cp "$MANIFEST" release-files/
+          cp "$EXE" release-files/
+          cp "$ISUM" release-files/SHA256SUMS_INSTALLER.txt
+          (cd release-files && sha256sum SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip final-acceptance-1.8.0.json update_manifest.json SRTVoiceStudio_Setup_1.8.0.exe > SHA256SUMS_RELEASE.txt)
+
+          cat > release-files/HUONG_DAN_SRTVoiceStudio_1.8.0.txt <<'EOF'
+          SRT Voice Studio 1.8.0 - CapCut Catalog
+
+          KHUYEN NGHI NEU DANG O 1.7.2:
+          1. Dong SRT Voice Studio.
+          2. Giai nen SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip.
+          3. Chay Apply_Update.cmd.
+          4. Mo lai app va kiem tra Voice Library.
+          5. Neu can quay lai 1.7.2, chay Rollback_Update.cmd.
+
+          INSTALLER:
+          - SRTVoiceStudio_Setup_1.8.0.exe da qua Windows smoke test.
+          - Dung khi cai moi hoac can cai dat day du.
+
+          TINH NANG 1.8.0:
+          - 31 profile CapCut tham khao theo thi truong: US 12, UK 6, JP 6, VN 7.
+          - Loc Voice Library theo My, Anh, Nhat Ban, Viet Nam va CapCut.
+          - Hien thi thi truong, dac tinh va use-case goi y.
+          - Profile CapCut hien trong dropdown tung nuoc voi nhan [CapCut - tham khao].
+          - Profile CapCut KHONG render truc tiep trong app va khong vao local TTS router.
+          - Giu nguyen 11 Aivis Nhat va 10 Korva Viet.
+          - Giu Korva SHA hotfix 1.7.2.
+          - Unified Workspace single-file/multi-file smoke da sua va PASS.
+
+          ACCEPTANCE:
+          - QA full regression: PASS.
+          - Windows installer smoke: PASS.
+          - Korva real-download SHA: PASS.
+          - Exact final tree: PASS.
+          - Rollback: PASS.
+          - Corruption guard: PASS.
+          - Reapply: PASS.
+
+          Baseline patch: SRT Voice Studio 1.7.2.
+          EOF
+
+          INSTALLER_SHA=$(cat installer-sha.txt)
+          cat > release-notes.md <<EOF
+          ## SRT Voice Studio 1.8.0 — CapCut Catalog
+
+          Bản 1.8.0 mở rộng **Voice Library theo thị trường** và giữ nguyên cơ chế local TTS đã ổn định từ 1.7.2.
+
+          ### CapCut Catalog
+          - **31 profile CapCut tham khảo**: US 12 · UK 6 · Nhật 6 · Việt 7.
+          - Bộ lọc: Mỹ / English US, Anh / English UK, Nhật Bản, Việt Nam, CapCut.
+          - Mỗi profile có thị trường, đặc tính và use-case gợi ý.
+          - Profile CapCut xuất hiện trong dropdown từng quốc gia với nhãn **CapCut • tham khảo**.
+          - Các profile này **không render trực tiếp trong SRT Voice Studio** và không được đưa vào local TTS router.
+
+          ### Local voices giữ nguyên
+          - 11 giọng Nhật Aivis tùy chọn.
+          - 10 giọng Việt Korva tùy chọn.
+          - Korva SHA hotfix từ 1.7.2 được giữ nguyên và kiểm thử bằng tải asset thật.
+
+          ### Unified Workspace
+          - Single-file và multi-file dùng cùng queue production.
+          - Smoke test đã chuyển sang kiểm tra report render thực tế: caption hợp lệ và overlap = 0.
+
+          ### Nghiệm thu
+          - Full regression: PASS.
+          - CapCut market/catalog gate: PASS.
+          - Frozen app + self-test: PASS.
+          - Windows installer smoke: PASS.
+          - Exact 1.7.2 baseline → 1.8.0 final tree: PASS.
+          - Rollback / corruption guard / reapply: PASS.
+          - Delta: **7 file thay đổi**, payload ratio khoảng **1.0127%**.
+
+          **ZIP patch SHA-256**
+          `1A1A00DB932627159AB45C6563AC6A1E1080BADF376866490F6F078D58238F72`
+
+          **Installer SHA-256**
+          `$INSTALLER_SHA`
+
+          Nếu đang dùng 1.7.2, ưu tiên ZIP patch nhỏ. Installer dùng cho cài mới hoặc khi muốn cài đầy đủ.
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='srt-voice-studio-v1.8.0'
+          TARGET='15a69c7916756c0ed2ba77ccf5771fcec1dece0f'
+          TITLE='SRT Voice Studio 1.8.0 - CapCut Catalog'
+          ASSETS=(
+            release-files/SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip
+            release-files/SRTVoiceStudio_Setup_1.8.0.exe
+            release-files/final-acceptance-1.8.0.json
+            release-files/update_manifest.json
+            release-files/SHA256SUMS_RELEASE.txt
+            release-files/SHA256SUMS_INSTALLER.txt
+            release-files/HUONG_DAN_SRTVoiceStudio_1.8.0.txt
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md --latest
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --target "$TARGET" --title "$TITLE" --notes-file release-notes.md --latest
+          fi
