@@ -39,16 +39,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP='accepted/SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip'
-          EVIDENCE='accepted/final-acceptance-1.8.0.json'
-          MANIFEST='accepted/update_manifest.json'
-          EXE='installer/SRTVoiceStudio_Setup_1.8.0.exe'
-          ISUM='installer/SHA256SUMS.txt'
-          test -f "$ZIP"
-          test -f "$EVIDENCE"
-          test -f "$MANIFEST"
-          test -f "$EXE"
-          test -f "$ISUM"
+          ZIP="$(find accepted -type f -name 'SRTVoiceStudio_Update_1.7.2_to_1.8.0.zip' -print -quit)"
+          EVIDENCE="$(find accepted -type f -name 'final-acceptance-1.8.0.json' -print -quit)"
+          MANIFEST="$(find accepted -type f -name 'update_manifest.json' -print -quit)"
+          EXE="$(find installer -type f -name 'SRTVoiceStudio_Setup_1.8.0.exe' -print -quit)"
+          ISUM="$(find installer -type f -name 'SHA256SUMS.txt' -print -quit)"
+          test -n "$ZIP" && test -f "$ZIP"
+          test -n "$EVIDENCE" && test -f "$EVIDENCE"
+          test -n "$MANIFEST" && test -f "$MANIFEST"
+          test -n "$EXE" && test -f "$EXE"
+          test -n "$ISUM" && test -f "$ISUM"
 
           python - "$ZIP" "$EVIDENCE" "$MANIFEST" "$EXE" "$ISUM" <<'PY'
           import hashlib,json,sys,re
@@ -130,7 +130,7 @@ jobs:
           EOF
 
           INSTALLER_SHA=$(cat installer-sha.txt)
-          cat > release-notes.md <<EOF
+          cat > release-notes.md <<'EOF'
           ## SRT Voice Studio 1.8.0 — CapCut Catalog
 
           Bản 1.8.0 mở rộng **Voice Library theo thị trường** và giữ nguyên cơ chế local TTS đã ổn định từ 1.7.2.
@@ -164,10 +164,11 @@ jobs:
           `1A1A00DB932627159AB45C6563AC6A1E1080BADF376866490F6F078D58238F72`
 
           **Installer SHA-256**
-          `$INSTALLER_SHA`
+          `__INSTALLER_SHA__`
 
           Nếu đang dùng 1.7.2, ưu tiên ZIP patch nhỏ. Installer dùng cho cài mới hoặc khi muốn cài đầy đủ.
           EOF
+          sed -i "s/__INSTALLER_SHA__/$INSTALLER_SHA/" release-notes.md
 
       - name: Publish GitHub Release
         env:
